@@ -13,32 +13,57 @@
 
 #include "common.h"
 
-static __always_inline int ip4_funnel_udp_thru_tcp(struct __sk_buff* skb,
+static __always_inline int ip4_funnel(struct __sk_buff* skb,
+							__u8* eth,
 							struct iphdr* ip,
-							struct udphdr* udp,
+							const __u8 old_l4_proto,
+							void* l4,
+							const __u8 proto,
 							__u16 src_port,
 							__u16 dst_port){
-	CHECK_SKB_PTR(skb, udp+1);
+	struct tcphdr *old_tcp, *tcp = NULL;
+	struct udphdr *old_udp, *udp = NULL;
 
-	//Store current UDP offset & content of udp header
-	__u32 l3_off = (__u8*)ip - (__u8*)SKB_GET_ETH(skb);
-	__u32  l4_off __attribute__((unused)) =
-					(__u8*)udp - (__u8*)SKB_GET_ETH(skb);
+	__u32 old_tot_len = bpf_ntohs(ip->tot_len) ;
+	__u32 l3_off  = (__u8*)ip - eth;
+	__u32 fhdr_size;
 
-	PRINTK("UDP packet of length: %u, offset: %u!\n", skb->len, l4_off);
+	//L4 header to funnel
+	if(old_l4_proto == IPPROTO_UDP){
+		old_udp = (struct udphdr*)l4;
+		CHECK_SKB_PTR(skb, old_udp+1);
+	}else if(old_l4_proto == IPPROTO_TCP){
+		old_tcp = (struct tcphdr*)l4;
+		CHECK_SKB_PTR(skb, old_tcp+1);
+	}else{
+		PRINTK("ERROR: IP funneled proto %d not supported!",
+							old_l4_proto);
+		return TC_ACT_SHOT;
+	}
+
+	//Funneling header
+	if(proto == IPPROTO_UDP){
+		fhdr_size = sizeof(struct udphdr);
+	}else if(proto == IPPROTO_TCP){
+		fhdr_size = sizeof(struct tcphdr);
+	}else{
+		PRINTK("ERROR: IP funneling proto %d not supported!",
+							proto);
+		return TC_ACT_SHOT;
+	}
 
 	//Change IP PROTO
 	union ttl_proto old_ttl = *(union ttl_proto*)&ip->ttl;
-	ip->protocol = IPPROTO_TCP;
+	ip->protocol = proto;
 	__s64 diff = bpf_csum_diff((__be32*)&old_ttl, 4, (__be32*)&ip->ttl, 4,
 							0);
 
-	//Increase tot_len with TCP hdr
+	//Increase tot_len with new L4 hdr
 	struct ver_ihl_tos_totlen old_totlen = *(struct ver_ihl_tos_totlen*)ip;
-	ip->tot_len = bpf_htons(bpf_ntohs(ip->tot_len)+sizeof(struct tcphdr));
+	ip->tot_len = bpf_htons(bpf_ntohs(ip->tot_len)+fhdr_size);
 	diff = bpf_csum_diff((__be32*)&old_totlen, 4, (__be32*)ip, 4, diff);
 
-	//Adjust IP checksum and make room for the TCP hdr
+	//Adjust IP checksum and make room for the new L4 hdr
 	int rc = bpf_l3_csum_replace(skb, l3_off + offsetof(struct iphdr, check),
 							0,
 							diff, 0);
@@ -46,59 +71,87 @@ static __always_inline int ip4_funnel_udp_thru_tcp(struct __sk_buff* skb,
 		PRINTK("ERROR l3_csum_replace: %d", rc);
 		return TC_ACT_SHOT;
 	}
-	rc = bpf_skb_adjust_room(skb, sizeof(struct tcphdr), BPF_ADJ_ROOM_NET,
-							0);
+	rc = bpf_skb_adjust_room(skb, fhdr_size, BPF_ADJ_ROOM_NET, 0);
 	if(rc < 0){
 		PRINTK("ERROR adjust room: %d", rc);
 		return TC_ACT_SHOT;
 	}
 
-	//Reeval ptrs
-	ip = (struct iphdr*)((__u8*)SKB_GET_ETH(skb)+sizeof(struct ethhdr));
+	//Reeval ptrs common ptrs
+	eth = (__u8*)SKB_GET_ETH(skb);
+	ip = (struct iphdr*)(eth+sizeof(struct ethhdr));
 	CHECK_SKB_PTR(skb, ip+1);
-	struct tcphdr* tcp = (struct tcphdr *) ((__u8*)ip + (ip->ihl * 4));
-	CHECK_SKB_PTR(skb, tcp+1);
-	l3_off = (__u8*)ip - (__u8*)SKB_GET_ETH(skb); //Must be recomputed (?)
-	l4_off = (__u8*)tcp - (__u8*)SKB_GET_ETH(skb); //idem
-	udp = (struct udphdr*)(tcp+1);
-	CHECK_SKB_PTR(skb, udp+1);
 
-	tcp->dest = bpf_htons(dst_port);
-	tcp->source = bpf_htons(src_port);
-	tcp->seq = bpf_htonl(0xCAFEBABE);
-	tcp->ack_seq = bpf_htonl(0xBABECAFE);
-	*((&tcp->ack_seq)+1) = tcp->urg_ptr = tcp->check = 0x0;
-	tcp->syn = 0x1;
-	tcp->window = bpf_htons(1024);
-	tcp->doff = sizeof(*tcp)/4;
-	tcp->check = 0x0;
+	//Compute L4 funneling cksum as a diff over the old L4
+	diff = 0;
+	if(old_l4_proto == IPPROTO_UDP){
+		old_udp = (struct udphdr *)((__u8*)ip + (ip->ihl * 4)
+								+ fhdr_size);
+		CHECK_SKB_PTR(skb, old_udp+1);
 
-	//UDP checksum as a basis
-	diff = csum_fold(udp->check);
+		//Recover previous cksum
+		diff = csum_fold(old_udp->check);
 
-	//Add diff from the new TCP hdr
-	diff = bpf_csum_diff(0, 0, (__be32*)tcp, sizeof(*tcp), diff);
+		//UDP checksum (0ed in UDP checksum calc, now payload)
+		__be16 udp_csum[2] = {0, old_udp->check};
+		diff = bpf_csum_diff(0, 0, (__be32*)&udp_csum, 4, diff);
+	}else if(old_l4_proto == IPPROTO_TCP){
+		old_tcp = (struct tcphdr *) ((__u8*)ip + (ip->ihl * 4)
+								+ fhdr_size);
+		CHECK_SKB_PTR(skb, old_tcp+1);
 
-	//Diff pseudoheader
+		//Recover previous cksum
+		diff = csum_fold(old_tcp->check);
+
+		//UDP checksum (0ed in UDP checksum calc, now payload)
+		__be16 tcp_csum[2] = {old_tcp->check, 0};
+		diff = bpf_csum_diff(0, 0, (__be32*)&tcp_csum, 4, diff);
+	}
+
+	//Pseudoheader diff
 	struct pseudo_header old, new;
 	old.src = ip->saddr;
 	old.dst = ip->daddr;
 	old.res = 0x0;
-	old.proto = IPPROTO_UDP;
-	old.len = udp->len;
+	old.proto = old_l4_proto;
+	old.len = bpf_htons(old_tot_len - (ip->ihl * 4));
 
 	new = old;
-	new.proto = IPPROTO_TCP;
-	new.len = bpf_htons(bpf_ntohs(udp->len)+sizeof(*tcp));
+	new.proto = proto;
+	new.len = bpf_htons(old_tot_len + fhdr_size - (ip->ihl * 4));
 	diff = bpf_csum_diff((__be32*)&old, sizeof(old), (__be32*)&new,
 							sizeof(new), diff);
+	//Fill in the funneling hdr and adjust cksum diff
+	if(proto == IPPROTO_UDP){
+		udp = (struct udphdr *) ((__u8*)ip + (ip->ihl * 4));
+		CHECK_SKB_PTR(skb, udp+1);
 
-	//Finally add the UDP checksum (0ed in UDP checksum calc, now payload)
-	__be16 udp_csum[2] = {0, udp->check};
-	diff = bpf_csum_diff(0, 0, (__be32*)&udp_csum, 4, diff);
+		udp->dest = bpf_htons(dst_port);
+		udp->source =  bpf_htons(src_port);
+		udp->len = bpf_htons(old_tot_len - (ip->ihl * 4) + fhdr_size);
+		diff = bpf_csum_diff(0, 0, (__be32*)udp, sizeof(*udp), diff);
 
-	//Set checksum
-	tcp->check = csum_fold(diff);
+		//Set checksum
+		udp->check = csum_fold(diff);
+	}else if(proto == IPPROTO_TCP){
+		tcp = (struct tcphdr *) ((__u8*)ip + (ip->ihl * 4));
+		CHECK_SKB_PTR(skb, tcp+1);
+
+		tcp->dest = bpf_htons(dst_port);
+		tcp->source = bpf_htons(src_port);
+		tcp->seq = bpf_htonl(0xCAFEBABE);
+		tcp->ack_seq = bpf_htonl(0xBABECAFE);
+		*((&tcp->ack_seq)+1) = tcp->urg_ptr = tcp->check = 0x0;
+		tcp->syn = 0x1;
+		tcp->window = bpf_htons(1024);
+		tcp->doff = sizeof(*tcp)/4;
+		tcp->check = 0x0;
+
+		diff = bpf_csum_diff(0, 0, (__be32*)tcp, sizeof(*tcp), diff);
+
+		//Set checksum
+		tcp->check = csum_fold(diff);
+	}
 
 	//Packet has been mangled, mark it as such
 	bpf_set_hash_invalid(skb);
@@ -106,24 +159,30 @@ static __always_inline int ip4_funnel_udp_thru_tcp(struct __sk_buff* skb,
 	return TC_ACT_OK;
 }
 
-static inline int proc_ip4(struct __sk_buff* skb, struct iphdr* ip){
+static inline int proc_ip4(struct __sk_buff* skb, __u8* eth, struct iphdr* ip){
 	struct udphdr* udp;
 
 	CHECK_SKB_PTR(skb, ip+1);
 
-	if(ip->protocol != IPPROTO_UDP){
-		return TC_ACT_UNSPEC;
+	//XXX: to be removed by dynamic config
+	if(ip->protocol == IPPROTO_UDP){
+		udp = (struct udphdr *) ((__u8*)ip + (ip->ihl * 4));
+		CHECK_SKB_PTR(skb, udp+1);
+
+		if(udp->dest == bpf_htons(UDP_IPFIX_PORT) ||
+			udp->dest == bpf_htons(UDP_NETFLOW_PORT) ||
+			udp->dest == bpf_htons(UDP_SFLOW_PORT)){
+			return ip4_funnel(skb, eth, ip, IPPROTO_UDP, udp,
+							IPPROTO_TCP,
+							TCP_FUNNEL_SRC_PORT,
+							TCP_FUNNEL_DST_PORT);
+		}
 	}
 
-	//XXX: check if DST IP and DST port is the one we care
 
-	udp = (struct udphdr *) ((__u8*)ip + (ip->ihl * 4));
-	CHECK_SKB_PTR(skb, udp+1);
-	if(udp->dest != bpf_ntohs(UDP_TOFUNNEL_DST_PORT))
-		return TC_ACT_UNSPEC;
+	//XXX: end to be removed
 
-	return ip4_funnel_udp_thru_tcp(skb, ip, udp, TCP_FUNNEL_SRC_PORT,
-							TCP_FUNNEL_DST_PORT);
+	return TC_ACT_UNSPEC;
 }
 
 SEC("funnel")
@@ -133,7 +192,7 @@ int tc_ingress(struct __sk_buff *skb){
 
 	if(eth->h_proto == bpf_htons(ETH_P_IP)){
 		struct iphdr* ip = (struct iphdr*)((__u8*)eth+sizeof(struct ethhdr));
-		return proc_ip4(skb, ip);
+		return proc_ip4(skb, (__u8*)eth, ip);
 	}else if(eth->h_proto == bpf_htons(ETH_P_IPV6)){
 		//XXX
 		PRINTK("IPv6 packet with length: %d NOT SUPPORTED!\n", skb->len);

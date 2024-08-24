@@ -4,7 +4,7 @@
 #if 0
 	#define PRINTK(...) bpf_printk( __VA_ARGS__ )
 #else
-	#define PRINTK(...) 
+	#define PRINTK(...)
 #endif
 
 #define SKB_GET_ETH( SKB ) (struct ethhdr*)(unsigned long long)skb->data
@@ -41,8 +41,13 @@ static __always_inline  __be16 csum_fold(__s64 csum)
 }
 
 
+//XXX: to be removed by dynamic config
 #define TCP_FUNNEL_DST_PORT 179
 #define TCP_FUNNEL_SRC_PORT 540 //E.g. UUCP
-#define UDP_TOFUNNEL_DST_PORT 2055
+
+#define UDP_IPFIX_PORT 4739
+#define UDP_NETFLOW_PORT 2055
+#define UDP_SFLOW_PORT 6343
+//XXX: end to be removed
 
 #endif //FUNNEL_COMMON_H
