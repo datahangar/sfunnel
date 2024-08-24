@@ -21,7 +21,7 @@ static __always_inline int ip4_unfunnel_udp_thru_tcp(struct __sk_buff* skb,
 	__s64 diff = bpf_csum_diff((__be32*)&old_ttl, 4, (__be32*)&ip->ttl, 4,
 								0);
 	if(diff < 0){
-		bpf_printk("ERROR csum_diff: %d", diff);
+		PRINTK("ERROR csum_diff: %d", diff);
 		return TC_ACT_SHOT;
 	}
 
@@ -30,7 +30,7 @@ static __always_inline int ip4_unfunnel_udp_thru_tcp(struct __sk_buff* skb,
 	ip->tot_len = bpf_htons(bpf_ntohs(ip->tot_len)-sizeof(struct tcphdr));
 	diff = bpf_csum_diff((__be32*)&old_totlen, 4, (__be32*)ip, 4, diff);
 	if(diff < 0){
-		bpf_printk("ERROR csum_diff: %d", diff);
+		PRINTK("ERROR csum_diff: %d", diff);
 		return TC_ACT_SHOT;
 	}
 
@@ -40,12 +40,12 @@ static __always_inline int ip4_unfunnel_udp_thru_tcp(struct __sk_buff* skb,
 							0,
 							diff, 0);
 	if(rc < 0){
-		bpf_printk("ERROR l3_csum_replace: %d", rc);
+		PRINTK("ERROR l3_csum_replace: %d", rc);
 		return TC_ACT_SHOT;
 	}
 	rc = bpf_skb_adjust_room(skb, -(__s32)sizeof(struct tcphdr), BPF_ADJ_ROOM_NET, 0);
 	if(rc < 0){
-		bpf_printk("ERROR adjust room: %d", rc);
+		PRINTK("ERROR adjust room: %d", rc);
 		return TC_ACT_SHOT;
 	}
 
@@ -82,7 +82,7 @@ int tc_ingress(struct __sk_buff *skb){
 		return proc_ip4(skb, ip);
 	}else if(eth->h_proto == bpf_htons(ETH_P_IPV6)){
 		//XXX
-		bpf_printk("IPv6 packet with length: %d NOT SUPPORTED!\n", skb->len);
+		PRINTK("IPv6 packet with length: %d NOT SUPPORTED!\n", skb->len);
 	}
 
 	return TC_ACT_UNSPEC;

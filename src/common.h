@@ -1,11 +1,17 @@
 #ifndef FUNNEL_COMMON_H
 #define FUNNEL_COMMON_H
 
+#if 0
+	#define PRINTK(...) bpf_printk( __VA_ARGS__ )
+#else
+	#define PRINTK(...) 
+#endif
+
 #define SKB_GET_ETH( SKB ) (struct ethhdr*)(unsigned long long)skb->data
 
 #define CHECK_SKB_PTR( SKB, PTR ) \
 	if (  (void*)(PTR) > ((void*)(unsigned long long) SKB -> data_end )) {	\
-		bpf_printk("PTR: %p on pkt with length: %d out of bounds!\n",   \
+		PRINTK("PTR: %p on pkt with length: %d out of bounds!\n",   \
 								PTR, SKB ->len);\
 		return TC_ACT_OK;						\
 	} do{}while(0)

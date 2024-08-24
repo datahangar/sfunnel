@@ -22,9 +22,10 @@ static __always_inline int ip4_funnel_udp_thru_tcp(struct __sk_buff* skb,
 
 	//Store current UDP offset & content of udp header
 	__u32 l3_off = (__u8*)ip - (__u8*)SKB_GET_ETH(skb);
-	__u32 l4_off = (__u8*)udp - (__u8*)SKB_GET_ETH(skb);
+	__u32  l4_off __attribute__((unused)) =
+					(__u8*)udp - (__u8*)SKB_GET_ETH(skb);
 
-	bpf_printk("UDP packet of length: %u, offset: %u!\n", skb->len, l4_off);
+	PRINTK("UDP packet of length: %u, offset: %u!\n", skb->len, l4_off);
 
 	//Change IP PROTO
 	union ttl_proto old_ttl = *(union ttl_proto*)&ip->ttl;
@@ -42,13 +43,13 @@ static __always_inline int ip4_funnel_udp_thru_tcp(struct __sk_buff* skb,
 							0,
 							diff, 0);
 	if(rc < 0){
-		bpf_printk("ERROR l3_csum_replace: %d", rc);
+		PRINTK("ERROR l3_csum_replace: %d", rc);
 		return TC_ACT_SHOT;
 	}
 	rc = bpf_skb_adjust_room(skb, sizeof(struct tcphdr), BPF_ADJ_ROOM_NET,
 							0);
 	if(rc < 0){
-		bpf_printk("ERROR adjust room: %d", rc);
+		PRINTK("ERROR adjust room: %d", rc);
 		return TC_ACT_SHOT;
 	}
 
@@ -135,7 +136,7 @@ int tc_ingress(struct __sk_buff *skb){
 		return proc_ip4(skb, ip);
 	}else if(eth->h_proto == bpf_htons(ETH_P_IPV6)){
 		//XXX
-		bpf_printk("IPv6 packet with length: %d NOT SUPPORTED!\n", skb->len);
+		PRINTK("IPv6 packet with length: %d NOT SUPPORTED!\n", skb->len);
 	}
 
 	return TC_ACT_UNSPEC;
