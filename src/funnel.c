@@ -52,6 +52,9 @@ static __always_inline int ip4_funnel(struct __sk_buff* skb,
 		return TC_ACT_SHOT;
 	}
 
+	PRINTK("[%p] Funneling proto:%d packet thru proto: %d of size: %d", skb,
+							old_l4_proto, proto,
+							skb->len);
 	//Change IP PROTO
 	union ttl_proto old_ttl = *(union ttl_proto*)&ip->ttl;
 	ip->protocol = proto;
@@ -156,6 +159,7 @@ static __always_inline int ip4_funnel(struct __sk_buff* skb,
 	//Packet has been mangled, mark it as such
 	bpf_set_hash_invalid(skb);
 
+	PRINTK("[%p] Funneled size: %d!", skb, skb->len);
 	return TC_ACT_OK;
 }
 
