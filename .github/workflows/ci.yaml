@@ -40,7 +40,7 @@ jobs:
           sudo iptables -I FORWARD -s 11.1.1.1 -j ACCEPT
 
       - name: "Run tests..."
-        run: cd sfunnel/test && make
+        run: cd sfunnel/test && make VERBOSE=1
 
   docker_build_and_publish:
     needs: [make_check]

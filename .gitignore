@@ -5,4 +5,5 @@
 *.l[oa]
 *.swp
 *.swo
+test/.*
 __pycache__/

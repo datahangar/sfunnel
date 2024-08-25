@@ -22,7 +22,7 @@ pkts_44 = [
     Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/TCP(sport=65000, dport=4739)/Raw("ABCD")
 ]
 
-#Multiple of 1040
+#1041 bytes
 pkts_1041 = [
     Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=4739)/Raw("X"*1001),
     Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=2055)/Raw("X"*1001),
@@ -75,10 +75,9 @@ def print_pkts(iface, pkts):
 def test_unit_funnel_unfunnel(sniff_packets):
     sniffed_packets_veth1, sniffed_packets_br_net, sniffed_packets_veth2, sniff_complete_veth1_ev, sniff_complete_br_net_ev, sniff_complete_veth2_ev = sniff_packets
 
-    #43 byte pkts
     sendp(all_pkts, iface="veth0")
 
-    #Wait for sniff
+    #Wait for sniffers to complete their job
     sniff_complete_veth1_ev.wait(SNIFF_TIMEOUT+1)
     sniff_complete_br_net_ev.wait(SNIFF_TIMEOUT+1)
     sniff_complete_veth2_ev.wait(SNIFF_TIMEOUT+1)
