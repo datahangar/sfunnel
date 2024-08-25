@@ -41,7 +41,8 @@ static __always_inline  __be16 csum_fold(__s64 csum)
 }
 
 #ifndef BPF_LICENSE
-#define BPF_LICENSE(NAME) char _license[] SEC( NAME ) = NAME
+#define BPF_LICENSE(NAME) \
+  char ____license[] __attribute__((section("license"), used)) = NAME
 #endif
 
 //XXX: to be removed by dynamic config
