@@ -1,4 +1,9 @@
-all: compile setup load
+all: check
+
+check: compile setup load run_checks clean
+
+run_checks:
+	sudo pytest -s unit_test.py
 
 setup:
 	sudo ip link add type veth || true
