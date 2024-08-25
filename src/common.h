@@ -48,6 +48,10 @@ static __always_inline  __be16 csum_fold(__s64 csum)
 #define UDP_IPFIX_PORT 4739
 #define UDP_NETFLOW_PORT 2055
 #define UDP_SFLOW_PORT 6343
+
+//Test only
+#define TEST_TCPINTCP_TCP_FUNNEL_SRC_PORT 541
+
 //XXX: end to be removed
 
 #endif //FUNNEL_COMMON_H

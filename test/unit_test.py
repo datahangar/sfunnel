@@ -6,21 +6,30 @@ import threading
 pkts_43 = [
     Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=4739)/Raw("ABC"),
     Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=2055)/Raw("ABC"),
-    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=6343)/Raw("ABC")
+    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=6343)/Raw("ABC"),
+
+    #Fake IPFIX over TCP
+    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/TCP(sport=65000, dport=4739)/Raw("ABC")
 ]
 
 #Multiple of 4
 pkts_44 = [
     Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=4739)/Raw("ABCD"),
     Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=2055)/Raw("ABCD"),
-    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=6343)/Raw("ABCD")
+    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=6343)/Raw("ABCD"),
+
+    #Fake IPFIX over TCP
+    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/TCP(sport=65000, dport=4739)/Raw("ABCD")
 ]
 
 #Multiple of 1040
 pkts_1041 = [
     Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=4739)/Raw("X"*1001),
     Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=2055)/Raw("X"*1001),
-    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=6343)/Raw("X"*1001)
+    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=6343)/Raw("X"*1001),
+
+    #Fake IPFIX over TCP
+    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/TCP(sport=65000, dport=4739)/Raw("X"*1001)
 ]
 
 all_pkts = pkts_43 + pkts_44 + pkts_1041
@@ -67,9 +76,7 @@ def test_unit_funnel_unfunnel(sniff_packets):
     sniffed_packets_veth1, sniffed_packets_br_net, sniffed_packets_veth2, sniff_complete_veth1_ev, sniff_complete_br_net_ev, sniff_complete_veth2_ev = sniff_packets
 
     #43 byte pkts
-    sendp(pkts_43, iface="veth0")
-    sendp(pkts_44, iface="veth0")
-    sendp(pkts_1041, iface="veth0")
+    sendp(all_pkts, iface="veth0")
 
     #Wait for sniff
     sniff_complete_veth1_ev.wait(SNIFF_TIMEOUT+1)
@@ -114,7 +121,10 @@ def test_unit_funnel_unfunnel(sniff_packets):
         #Synthetically create the funneled pkt
         aux = p.copy()
         ip = IP(src=p["IP"].src, dst=p["IP"].dst, ttl=p["IP"].ttl)
-        tcp = TCP(dport=179, sport=540, flags="S", urgptr=0, window=1024, seq=0xCAFEBABE, ack=0xBABECAFE)
+
+
+        sport = 540 if l4_proto == "UDP" else 541
+        tcp = TCP(dport=179, sport=sport, flags="S", urgptr=0, window=1024, seq=0xCAFEBABE, ack=0xBABECAFE)
         funneled_p = Ether()/ip/tcp/aux[l4_proto]
         funneled_p = funneled_p.__class__(bytes(funneled_p)) #Calculate checksums
 

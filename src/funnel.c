@@ -183,6 +183,20 @@ static inline int proc_ip4(struct __sk_buff* skb, __u8* eth, struct iphdr* ip){
 		}
 	}
 
+#ifdef TEST_TCP_FUNNELING
+	if(ip->protocol == IPPROTO_TCP){
+		struct tcphdr* tcp;
+		tcp = (struct tcphdr *) ((__u8*)ip + (ip->ihl * 4));
+		CHECK_SKB_PTR(skb, tcp+1);
+
+		if(tcp->dest == bpf_htons(UDP_IPFIX_PORT)){
+			return ip4_funnel(skb, eth, ip, IPPROTO_TCP, tcp,
+					IPPROTO_TCP,
+					TEST_TCPINTCP_TCP_FUNNEL_SRC_PORT,
+					TCP_FUNNEL_DST_PORT);
+		}
+	}
+#endif //TEST_TCP_FUNNELING
 
 	//XXX: end to be removed
 

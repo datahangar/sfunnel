@@ -89,10 +89,18 @@ static inline int proc_ip4(struct __sk_buff* skb, struct iphdr* ip){
 		tcp = (struct tcphdr *) ((__u8*)ip + (ip->ihl * 4));
 		CHECK_SKB_PTR(skb, tcp+1);
 
+		if(tcp->dest != bpf_htons(TCP_FUNNEL_DST_PORT))
+			return TC_ACT_UNSPEC;
+
 		//Unfunnel {IPFIX, Netflow and sFlow} via TCP (BGP)
 		if(tcp->source == bpf_htons(TCP_FUNNEL_SRC_PORT))
 			return ip4_unfunnel(skb, ip, IPPROTO_TCP, tcp,
 								IPPROTO_UDP);
+#ifdef TEST_TCP_FUNNELING
+		if(tcp->source == bpf_htons(TEST_TCPINTCP_TCP_FUNNEL_SRC_PORT))
+			return ip4_unfunnel(skb, ip, IPPROTO_TCP, tcp,
+								IPPROTO_TCP);
+#endif //TEST_TCP_FUNNELING
 	}
 
 	//XXX: end to be removed

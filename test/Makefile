@@ -36,8 +36,8 @@ unload:
 	sudo tc filter del dev veth2 egress || true
 
 compile:
-	clang -O2 -Wall -Werror -g -target bpf -c ../src/funnel.c -o tc_funnel.o
-	clang -O2 -Wall -Werror -g -target bpf -c ../src/unfunnel.c -o tc_unfunnel.o
+	clang -DTEST_TCP_FUNNELING=1 -O2 -Wall -Werror -g -target bpf -c ../src/funnel.c -o tc_funnel.o
+	clang -DTEST_TCP_FUNNELING=1 -O2 -Wall -Werror -g -target bpf -c ../src/unfunnel.c -o tc_unfunnel.o
 
 show:
 	sudo tc filter show dev veth0 ingress
