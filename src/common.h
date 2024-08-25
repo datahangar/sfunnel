@@ -32,7 +32,7 @@ struct __attribute__((packed)) ver_ihl_tos_totlen {
 	__be16 tot_len;
 };
 
-//Taken from cilium
+//Taken from Cilium
 static __always_inline  __be16 csum_fold(__s64 csum)
 {
 	csum = (csum & 0xffff) + (csum >> 16);
@@ -40,6 +40,9 @@ static __always_inline  __be16 csum_fold(__s64 csum)
 	return (__be16)~csum;
 }
 
+#ifndef BPF_LICENSE
+#define BPF_LICENSE(NAME) char _license[] SEC( NAME ) = NAME
+#endif
 
 //XXX: to be removed by dynamic config
 #define TCP_FUNNEL_DST_PORT 179

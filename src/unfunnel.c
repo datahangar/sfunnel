@@ -125,4 +125,4 @@ int tc_ingress(struct __sk_buff *skb){
 	return TC_ACT_UNSPEC;
 }
 
-char _license[] SEC("license") = "GPL";
+BPF_LICENSE("Dual BSD/GPL");
