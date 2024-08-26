@@ -37,16 +37,16 @@ setup:
 	$(QUIET)sudo ip netns exec pod ip addr add 10.0.0.2/24 dev veth3
 
 load:
-	$(QUIET)sudo tc filter add dev veth1 ingress bpf da obj ./tc_funnel.o sec funnel verbose
-	$(QUIET)sudo tc filter add dev veth2 egress bpf da obj ./tc_unfunnel.o sec funnel verbose
+	$(QUIET)sudo tc filter add dev veth1 ingress bpf da obj ./tc_sfunnel.o sec funnel verbose
+	$(QUIET)sudo tc filter add dev veth2 egress bpf da obj ./tc_sfunnel.o sec funnel verbose
 
 unload:
 	$(QUIET)sudo tc filter del dev veth1 ingress || true
 	$(QUIET)sudo tc filter del dev veth2 egress || true
 
 compile:
-	$(QUIET)clang -DTEST_TCP_FUNNELING=1 -O2 -Wall -Werror -g -target bpf -c ../src/funnel.c -o tc_funnel.o
-	$(QUIET)clang -DTEST_TCP_FUNNELING=1 -O2 -Wall -Werror -g -target bpf -c ../src/unfunnel.c -o tc_unfunnel.o
+	$(QUIET)python3 ../tools/gen.py ../src/rules.default > rules.h
+	$(QUIET)clang -DTEST_TCP_FUNNELING=1 -O2 -Wall -Werror -I. -g -target bpf -c ../src/sfunnel.c -o tc_sfunnel.o
 
 show:
 	$(QUIET)sudo tc filter show dev veth0 ingress

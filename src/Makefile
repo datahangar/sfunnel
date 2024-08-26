@@ -1,8 +1,9 @@
 all: compile
 
 compile:
-	clang -O2 -Wall -Werror -g -target bpf -c funnel.c -o tc_funnel.o
-	clang -O2 -Wall -Werror -g -target bpf -c unfunnel.c -o tc_unfunnel.o
+	python3 ../tools/gen.py rules.default > rules.h
+	clang -O2 -Wall -Werror -g -target bpf -c sfunnel.c -o tc_sfunnel.o
 
 clean:
 	rm -rf *.o || true
+	rm -rf rules.h || true

@@ -12,18 +12,17 @@
 #include <bpf/bpf_tracing.h>
 
 #include "common.h"
+#include "lookup.h"
 
-static __always_inline int ip4_funnel(struct __sk_buff* skb,
-							__u8* eth,
-							struct iphdr* ip,
-							const __u8 old_l4_proto,
-							void* l4,
-							const __u8 proto,
+static __always_inline
+int ip4_funnel(struct __sk_buff* skb, __u8* eth, struct iphdr* ip, void* l4,
+							const __u8 funn_proto,
 							__u16 src_port,
 							__u16 dst_port){
 	struct tcphdr *old_tcp, *tcp = NULL;
 	struct udphdr *old_udp, *udp = NULL;
 
+	__u8 old_l4_proto = ip->protocol;
 	__u32 old_tot_len = bpf_ntohs(ip->tot_len) ;
 	__u32 l3_off  = (__u8*)ip - eth;
 	__u32 fhdr_size;
@@ -42,22 +41,23 @@ static __always_inline int ip4_funnel(struct __sk_buff* skb,
 	}
 
 	//Funneling header
-	if(proto == IPPROTO_UDP){
+	if(funn_proto == IPPROTO_UDP){
 		fhdr_size = sizeof(struct udphdr);
-	}else if(proto == IPPROTO_TCP){
+	}else if(funn_proto == IPPROTO_TCP){
 		fhdr_size = sizeof(struct tcphdr);
 	}else{
 		PRINTK("ERROR: IP funneling proto %d not supported!",
-							proto);
+							funn_proto);
 		return TC_ACT_SHOT;
 	}
 
 	PRINTK("[%p] Funneling proto:%d packet thru proto: %d of size: %d", skb,
-							old_l4_proto, proto,
+							old_l4_proto,
+							funn_proto,
 							skb->len);
 	//Change IP PROTO
 	union ttl_proto old_ttl = *(union ttl_proto*)&ip->ttl;
-	ip->protocol = proto;
+	ip->protocol = funn_proto;
 	__s64 diff = bpf_csum_diff((__be32*)&old_ttl, 4, (__be32*)&ip->ttl, 4,
 							0);
 
@@ -120,12 +120,12 @@ static __always_inline int ip4_funnel(struct __sk_buff* skb,
 	old.len = bpf_htons(old_tot_len - (ip->ihl * 4));
 
 	new = old;
-	new.proto = proto;
+	new.proto = funn_proto;
 	new.len = bpf_htons(old_tot_len + fhdr_size - (ip->ihl * 4));
 	diff = bpf_csum_diff((__be32*)&old, sizeof(old), (__be32*)&new,
 							sizeof(new), diff);
 	//Fill in the funneling hdr and adjust cksum diff
-	if(proto == IPPROTO_UDP){
+	if(funn_proto == IPPROTO_UDP){
 		udp = (struct udphdr *) ((__u8*)ip + (ip->ihl * 4));
 		CHECK_SKB_PTR(skb, udp+1);
 
@@ -136,7 +136,7 @@ static __always_inline int ip4_funnel(struct __sk_buff* skb,
 
 		//Set checksum
 		udp->check = csum_fold(diff);
-	}else if(proto == IPPROTO_TCP){
+	}else if(funn_proto == IPPROTO_TCP){
 		tcp = (struct tcphdr *) ((__u8*)ip + (ip->ihl * 4));
 		CHECK_SKB_PTR(skb, tcp+1);
 
@@ -163,42 +163,118 @@ static __always_inline int ip4_funnel(struct __sk_buff* skb,
 	return TC_ACT_OK;
 }
 
+static __always_inline
+int ip4_unfunnel(struct __sk_buff* skb, struct iphdr* ip, void* l4,
+							const __u8 proto){
+
+	__u32 fhdr_size;
+
+	//L4 funneling header
+	if(ip->protocol == IPPROTO_UDP){
+		fhdr_size = sizeof(struct udphdr);
+	}else if(ip->protocol == IPPROTO_TCP){
+		fhdr_size = sizeof(struct tcphdr);
+	}else{
+		PRINTK("ERROR: IP funneling proto %d not supported!",
+							ip->protocol);
+		return TC_ACT_SHOT;
+	}
+
+	PRINTK("[%p] Unfunneling funneling proto:%d packet, original L4 proto: %d of size: %d", skb,
+							ip->protocol, proto,
+							skb->len);
+
+	//Substract tcp HDR and recalc check
+	union ttl_proto old_ttl = *(union ttl_proto*)&ip->ttl;
+	ip->protocol = proto;
+	__s64 diff = bpf_csum_diff((__be32*)&old_ttl, 4, (__be32*)&ip->ttl, 4,
+								0);
+	if(diff < 0){
+		PRINTK("ERROR csum_diff: %d", diff);
+		return TC_ACT_SHOT;
+	}
+
+	//Decrease tot_len with TCP hdr
+	struct ver_ihl_tos_totlen old_totlen = *(struct ver_ihl_tos_totlen*)ip;
+	ip->tot_len = bpf_htons(bpf_ntohs(ip->tot_len) - fhdr_size);
+	diff = bpf_csum_diff((__be32*)&old_totlen, 4, (__be32*)ip, 4, diff);
+	if(diff < 0){
+		PRINTK("ERROR csum_diff: %d", diff);
+		return TC_ACT_SHOT;
+	}
+
+	//Modify checksum and remove TCP hdr
+	__u32 l3_off = (__u8*)ip - (__u8*)SKB_GET_ETH(skb);
+	int rc = bpf_l3_csum_replace(skb, l3_off + offsetof(struct iphdr, check),
+							0,
+							diff, 0);
+	if(rc < 0){
+		PRINTK("ERROR l3_csum_replace: %d", rc);
+		return TC_ACT_SHOT;
+	}
+	rc = bpf_skb_adjust_room(skb, -(__s32)fhdr_size, BPF_ADJ_ROOM_NET, 0);
+	if(rc < 0){
+		PRINTK("ERROR adjust room: %d", rc);
+		return TC_ACT_SHOT;
+	}
+
+	//Packet has been mangled, mark it as such
+	bpf_set_hash_invalid(skb);
+
+	PRINTK("[%p] Unfunneled size: %d!", skb, skb->len);
+
+	return TC_ACT_OK;
+}
+
 static inline int proc_ip4(struct __sk_buff* skb, __u8* eth, struct iphdr* ip){
-	struct udphdr* udp;
+	sfunnel_ip4_rule_t* rule;
+	struct tcphdr* tcp = NULL;
+	struct udphdr* udp = NULL;
+	void* l4;
+	sfunnel_action_funnel_params_t* funn_p;
 
 	CHECK_SKB_PTR(skb, ip+1);
-
-	//XXX: to be removed by dynamic config
 	if(ip->protocol == IPPROTO_UDP){
-		udp = (struct udphdr *) ((__u8*)ip + (ip->ihl * 4));
+		l4 = udp = (struct udphdr *) ((__u8*)ip + (ip->ihl * 4));
 		CHECK_SKB_PTR(skb, udp+1);
-
-		if(udp->dest == bpf_htons(UDP_IPFIX_PORT) ||
-			udp->dest == bpf_htons(UDP_NETFLOW_PORT) ||
-			udp->dest == bpf_htons(UDP_SFLOW_PORT)){
-			return ip4_funnel(skb, eth, ip, IPPROTO_UDP, udp,
-							IPPROTO_TCP,
-							TCP_FUNNEL_SRC_PORT,
-							TCP_FUNNEL_DST_PORT);
-		}
-	}
-
-#ifdef TEST_TCP_FUNNELING
-	if(ip->protocol == IPPROTO_TCP){
-		struct tcphdr* tcp;
-		tcp = (struct tcphdr *) ((__u8*)ip + (ip->ihl * 4));
+	}else if(ip->protocol == IPPROTO_TCP){
+		l4 = tcp = (struct tcphdr *) ((__u8*)ip + (ip->ihl * 4));
 		CHECK_SKB_PTR(skb, tcp+1);
-
-		if(tcp->dest == bpf_htons(UDP_IPFIX_PORT)){
-			return ip4_funnel(skb, eth, ip, IPPROTO_TCP, tcp,
-					IPPROTO_TCP,
-					TEST_TCPINTCP_TCP_FUNNEL_SRC_PORT,
-					TCP_FUNNEL_DST_PORT);
-		}
+	}else{
+		return TC_ACT_UNSPEC;
 	}
-#endif //TEST_TCP_FUNNELING
 
-	//XXX: end to be removed
+	PRINTK("[%p] Looking up IP4/%s, size %d", skb,
+						(ip->protocol == IPPROTO_UDP)?
+							"UDP" : "TCP",
+						skb->len);
+	rule = ip4_rule_lookup(skb, ip, tcp, udp);
+	if(!rule || rule >= ip4_rules+sizeof(ip4_rules)){
+		PRINTK("[%p] No match", skb);
+		return TC_ACT_UNSPEC;
+	}
+	PRINTK("[%p] Matched rule#%u", skb, rule->id);
+
+	//Direct actions
+	if(rule->actions.drop.execute){
+		return TC_ACT_SHOT;
+	}else if(rule->actions.accept.execute){
+		return TC_ACT_OK;
+	}
+
+	//Funnel or unfunnel
+	if(rule->actions.funnel.execute){
+		funn_p = &rule->actions.funnel.p.funnel;
+		return ip4_funnel(skb, eth, ip, l4, funn_p->funn_proto,
+						funn_p->sport,
+						funn_p->dport);
+	}else if(rule->actions.unfunnel.execute){
+		__be16 proto = rule->actions.unfunnel.p.unfunnel.proto;
+		return ip4_unfunnel(skb, ip, l4, proto);
+	}
+
+	//DNAT
+	//TODO
 
 	return TC_ACT_UNSPEC;
 }

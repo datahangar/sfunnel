@@ -1,4 +1,4 @@
 all: build
 
 build:
-	docker build -f ./Dockerfile -t sfunnel ../
+	docker build --progress=plain -f ./Dockerfile -t sfunnel ../

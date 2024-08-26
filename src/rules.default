@@ -1,0 +1,10 @@
+##Funneling rules
+
+ip udp dport 2055 actions funnel tcp dport 179 sport 540 #Netflow
+ip udp dport 4739 actions funnel tcp dport 179 sport 540 #IPFIX
+ip udp dport 6343 actions funnel tcp dport 179 sport 540 #SFLOW
+ip tcp dport 4739 actions funnel tcp dport 179 sport 541 #Fake IPFIX over TCP
+
+##Unfunneling
+ip tcp dport 179 sport 540 actions unfunnel udp
+ip tcp dport 179 sport 541 actions unfunnel tcp
