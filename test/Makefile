@@ -46,7 +46,7 @@ unload:
 
 compile:
 	$(QUIET)rm ../src/ruleset.h || true
-	$(QUIET)python3 ../tools/gen.py ../src/ruleset.default > ruleset.h
+	$(QUIET)python3 ../tools/gen.py ruleset > ruleset.h
 	$(QUIET)clang -DTEST_TCP_FUNNELING=1 -O2 -Wall -Werror -I./ -g -target bpf -c ../src/sfunnel.c -o tc_sfunnel.o
 
 show:
