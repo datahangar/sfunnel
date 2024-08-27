@@ -2,27 +2,27 @@ FROM debian:bookworm-slim
 
 WORKDIR /
 
-#deps
+#First install deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    clang \
-    llvm \
-    gcc \
     make \
-    libc6-dev \
-    linux-headers-amd64 \
-    linux-libc-dev \
-    git \
-    libelf-dev \
+    clang \
     libbpf-dev \
     iproute2 \
     python3 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-#First install deps
+#Copy sfunnel stuff
 COPY tools/ /opt/sfunnel/tools/
 COPY src/ /opt/sfunnel/src/
 COPY ./docker/entrypoint.sh /opt/sfunnel
 RUN chmod +x /opt/sfunnel/entrypoint.sh && \
-	ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/asm && \
-	cd /opt/sfunnel/src/ && make
+  ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/asm && \
+  cd /opt/sfunnel/src/ && make
+
+#Cleanup image
+RUN apt-get clean && rm -rf /var/lib/apt/lists/* && \
+  rm -rf /var/tmp/* && rm -rf /tmp/* && rm -rf /usr/share/doc/* && \
+  rm -rf /usr/share/doc/* && rm -rf /usr/share/man/* && rm -rf /usr/share/info/* && \
+  find /usr/share/locale -mindepth 1 -maxdepth 1 ! -name 'en*' -exec rm -rf {} +
+
 ENTRYPOINT ["/opt/sfunnel/entrypoint.sh"]
