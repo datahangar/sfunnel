@@ -3,8 +3,13 @@
 set -e
 #set -x
 
-N_ATTEMPTS=5
-RETRY_DELAY=5
+#Env variables
+N_ATTEMPTS=${N_ATTEMPTS:-6}
+RETRY_DELAY=${RETRY_DELAY:-3}
+
+_IFACES=$(ls /sys/class/net | tr "\n" " " | sed 's/\s*$//g')
+IFACES=${IFACES:-$_IFACES}
+
 PROG=/opt/sfunnel/src/tc_sfunnel.o
 
 #Compile eBPF program only if rulesset are defined at load time
@@ -21,7 +26,18 @@ load_prog(){
 	tc filter add dev $2 ingress bpf da obj $1 sec funnel verbose
 }
 
-###
+# Splash and useful info
+echo "[INFO] sfunnel "
+echo "[INFO] ENVs:"
+echo "  \$N_ATTEMPTS='$N_ATTEMPTS'"
+echo "  \$RETRY_DELAY='$RETRY_DELAY'"
+echo "  \$IFACES='$IFACES'"
+echo "[INFO] Container info:"
+echo "  Kernel: $(uname -a)"
+echo "  Debian: $(cat /etc/debian_version)"
+echo "  python3: $(python3 --version)"
+echo "  clang: $(clang --version)"
+echo "  iproute2: $(ip -V)"
 
 #If SFUNNEL_RULESET is defined, create the file
 if [[ "$SFUNNEL_RULESET" != "" ]]; then
@@ -44,7 +60,6 @@ else
 fi
 
 #Load
-IFACES=$(ls /sys/class/net | tr "\n" " " | sed 's/\s*$//g')
 
 echo ""
 echo -e "[INFO] Attaching BPF program '$PROG' to IFACES={$IFACES} using clsact qdisc...\n"
