@@ -1,5 +1,9 @@
 FROM debian:bookworm-slim
 
+#sfunnel VERSION
+ARG VERSION="unknown"
+ARG COMMIT="unknown"
+
 WORKDIR /
 
 #First install deps
@@ -17,7 +21,7 @@ COPY src/ /opt/sfunnel/src/
 COPY ./docker/entrypoint.sh /opt/sfunnel
 RUN chmod +x /opt/sfunnel/entrypoint.sh && \
   ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/asm && \
-  cd /opt/sfunnel/src/ && make
+  cd /opt/sfunnel/src/ && make && echo "${VERSION}(${COMMIT})" > /opt/sfunnel/VERSION
 
 #Cleanup image
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* && \

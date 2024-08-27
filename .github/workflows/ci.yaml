@@ -70,7 +70,7 @@ jobs:
 
           export TAG=$(git describe HEAD | sed 's/-.*$//g' | tr -d "v")
           EXACT_TAG=$(git describe --exact-match --match "v*" || echo "")
-          docker buildx build --platform ${PLATFORMS} -t sfunnel --load -f docker/Dockerfile .
+          docker buildx build --platform ${PLATFORMS} -t sfunnel --build-arg VERSION="$(git describe)" --build-arg COMMIT="${GITHUB_SHA}" --load -f docker/Dockerfile .
 
       - name: "[TEST] Run container with default ruleset..."
         run: |

@@ -27,7 +27,7 @@ load_prog(){
 }
 
 # Splash and useful info
-echo "[INFO] sfunnel "
+echo "[INFO] sfunnel $(cat /opt/sfunnel/VERSION)"
 echo "[INFO] ENVs:"
 echo "  \$N_ATTEMPTS='$N_ATTEMPTS'"
 echo "  \$RETRY_DELAY='$RETRY_DELAY'"
