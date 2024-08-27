@@ -63,21 +63,59 @@ jobs:
           username: ${{github.actor}}
           password: ${{secrets.GITHUB_TOKEN}}
 
-      - name: "Build and push to ghcr"
+      - name: "Build container"
         run: |
           #Cross-build
           cd sfunnel
 
-          echo "Fix mess with tags in actions/checkout..."
-          git fetch -f && git fetch -f --tags
-
           export TAG=$(git describe HEAD | sed 's/-.*$//g' | tr -d "v")
           EXACT_TAG=$(git describe --exact-match --match "v*" || echo "")
+          docker buildx build --platform ${PLATFORMS} -t sfunnel --load -f docker/Dockerfile .
 
+      - name: "[TEST] Run container with default ruleset..."
+        run: |
+          set -o pipefail
+          docker run --privileged sfunnel:latest 2>&1 | tee output
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "ERROR: container execution FAILED!"
+            exit 1
+          fi
+
+          grep "Using default ruleset" output || (echo "ERROR: unable to validate it loads default ruleset" && exit 1)
+
+      - name: "[TEST] Run container with custom ruleset file..."
+        run: |
+          RULE="ip saddr 127.0.0.1 udp dport 80 actions unfunnel udp"
+          echo "$RULE" > ruleset
+
+          set -o pipefail
+          docker run --privileged -v `pwd`/ruleset:/opt/sfunnel/src/ruleset 2>&1 sfunnel:latest | tee output
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "ERROR: container execution FAILED!"
+            exit 1
+          fi
+
+          grep "Compiling sfunnel with custom ruleset" output || (echo "ERROR: unable to validate it loads custom file ruleset" && exit 1)
+          grep "$RULE" output || (echo "ERROR: unable to validate it loads custom file ruleset" && exit 1)
+
+      - name: "[TEST] Run container with custom ruleset via SFUNNEL_RULESET..."
+        run: |
+          RULE="ip saddr 127.0.0.2 udp dport 80 actions unfunnel udp" #Should override ruleset file with 127.0.0.1
+
+          set -o pipefail
+          docker run -e SFUNNEL_RULESET="$RULE" --privileged -v `pwd`/ruleset:/opt/sfunnel/src/ruleset sfunnel:latest 2>&1 | tee output
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "ERROR: container execution FAILED!"
+            exit 1
+          fi
+
+          grep "SFUNNEL_RULESET='$RULE'" output || (echo "ERROR: unable to validate it loads custom ruleset via SFUNNEL_RULESET" && exit 1)
+          grep "Compiling sfunnel with custom ruleset" output || (echo "ERROR: unable to validate it loads custom ruleset via SFUNNEL_RULESET" && exit 1)
+          grep "$RULE" output || (echo "ERROR: unable to validate it loads custom ruleset via SFUNNEL_RULESET" && exit 1)
+
+      - name: "Push to ghcr"
+        run: |
           if [[ "${EXACT_TAG}" != "" ]]; then
-            echo "Cross-building and PUSHING!"
+            echo "Pushing to ghcr.io..."
             docker buildx build --platform ${PLATFORMS} --push -f docker/Dockerfile . --tag ghcr.io/${GITHUB_REPOSITORY}:${TAG}
-          else
-            echo "Cross-building ONLY"
-            docker buildx build --platform ${PLATFORMS} -f docker/Dockerfile .
           fi

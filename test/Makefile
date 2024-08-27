@@ -45,8 +45,9 @@ unload:
 	$(QUIET)sudo tc filter del dev veth2 egress || true
 
 compile:
-	$(QUIET)python3 ../tools/gen.py ../src/rules.default > rules.h
-	$(QUIET)clang -DTEST_TCP_FUNNELING=1 -O2 -Wall -Werror -I. -g -target bpf -c ../src/sfunnel.c -o tc_sfunnel.o
+	$(QUIET)rm ../src/ruleset.h || true
+	$(QUIET)python3 ../tools/gen.py ../src/ruleset.default > ruleset.h
+	$(QUIET)clang -DTEST_TCP_FUNNELING=1 -O2 -Wall -Werror -I./ -g -target bpf -c ../src/sfunnel.c -o tc_sfunnel.o
 
 show:
 	$(QUIET)sudo tc filter show dev veth0 ingress

@@ -106,6 +106,6 @@ typedef struct sfunnel_ip4_rule {
 	} actions;
 }sfunnel_ip4_rule_t;
 
-#include "rules.h"
+#include "ruleset.h"
 
 #endif //FUNNEL_COMMON_H

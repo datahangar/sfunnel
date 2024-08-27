@@ -25,5 +25,4 @@ COPY ./docker/entrypoint.sh /opt/sfunnel
 RUN chmod +x /opt/sfunnel/entrypoint.sh && \
 	ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/asm && \
 	cd /opt/sfunnel/src/ && make
-RUN mv /opt/sfunnel/src/tc_sfunnel.o /opt/sfunnel
 ENTRYPOINT ["/opt/sfunnel/entrypoint.sh"]
