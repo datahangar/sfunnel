@@ -92,7 +92,7 @@ SFUNNEL_RULESET="ip daddr <your LB IP1> tcp port 443 actions funnel tcp dport 80
 docker run --network="host" --privileged -e SFUNNEL_RULESET="$SFUNNEL_RULESET" sfunnel
 ```
 
-The `sfunnel` container will run and load the eBPF code.
+The `sfunnel` container will run, load the eBPF code and finish its execution.
 
 ##### More use-cases
 
@@ -102,12 +102,13 @@ for real world examples.
 ## Requirements
 
 * In Kubernetes:
-  * Permissions to spawn containers with `BPF` and `NET_ADMIN` capabilities.
+  * Privileged (`BPF`,`NET_ADMIN`, `SYS_ADMIN` capabilities_.
   * [eBPF](https://ebpf.io/)-enabled kernel, with support for `clsact` and `direct-action`.
   * Proper [MTU configuration](docs/funneling.md#mtu) (20 bytes for TCP, 8 for UDP).
 * On the funneling side:
   * Permissions to spawn `sfunnel`.
   * Route or proxy traffic to be funneled. More on this [here](docs/funneling.md)
+  * Proper [MTU configuration](docs/funneling.md#mtu) (20 bytes for TCP, 8 for UDP).
 
 Make sure stateful firewalls and IDS/IDPS are properly configured to allow this
 type of traffic.
@@ -117,7 +118,7 @@ type of traffic.
 * [Use-cases](docs/use-cases/)
 * [Funneling?](docs/funneling.md)
 * [Rule syntax](docs/rules.md)
-* [sfunnel container](docs/container.md) and how to deploy in K8s
+* [sfunnel container](docs/container.md)
 * [Deploying it in K8s](docs/k8s.md)
 * [Next steps](docs/next_steps.md)
 
