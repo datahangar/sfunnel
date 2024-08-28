@@ -68,8 +68,9 @@ jobs:
           #Cross-build
           cd sfunnel
 
-          export TAG=$(git describe HEAD | sed 's/-.*$//g' | tr -d "v")
-          EXACT_TAG=$(git describe --exact-match --match "v*" || echo "")
+          echo "Fix mess with tags in actions/checkout..."
+          git fetch -f && git fetch -f --tags
+
           docker buildx build --platform ${PLATFORMS} -t sfunnel --build-arg VERSION="$(git describe)" --build-arg COMMIT="${GITHUB_SHA}" --load -f docker/Dockerfile .
 
       - name: "[TEST] Run container with default ruleset..."
@@ -127,6 +128,10 @@ jobs:
 
       - name: "Push to ghcr"
         run: |
+          cd sfunnel
+          export TAG=$(git describe HEAD | sed 's/-.*$//g' | tr -d "v")
+          export EXACT_TAG=$(git describe --exact-match --match "v*" || echo "")
+          echo "TAG=${TAG}, EXACT_TAG=${EXACT_TAG}"
           if [[ "${EXACT_TAG}" != "" ]]; then
             echo "Pushing to ghcr.io..."
             docker buildx build --platform ${PLATFORMS} --push -f docker/Dockerfile . --tag ghcr.io/${GITHUB_REPOSITORY}:${TAG}
