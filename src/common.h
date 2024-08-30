@@ -3,7 +3,8 @@
 
 #include <stdbool.h>
 
-#if 0
+//#define DEBUG 1
+#if DEBUG == 1
 	#define PRINTK(...) bpf_printk( __VA_ARGS__ )
 #else
 	#define PRINTK(...)
@@ -37,8 +38,7 @@ struct __attribute__((packed)) ver_ihl_tos_totlen {
 };
 
 //Taken from Cilium
-static __always_inline  __be16 csum_fold(__s64 csum)
-{
+static __always_inline  __be16 csum_fold(__s64 csum){
 	csum = (csum & 0xffff) + (csum >> 16);
 	csum = (csum & 0xffff) + (csum >> 16);
 	return (__be16)~csum;

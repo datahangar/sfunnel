@@ -1,10 +1,14 @@
 all: compile
 
 FILE := $(or $(wildcard ruleset), ruleset.default)
+CFLAGS = -O2 -Wall -Werror -g
+ifeq ($(DEBUG), 1)
+    CFLAGS += -DDEBUG=1
+endif
 
 compile:
 	python3 ../tools/gen.py $(FILE) > ruleset.h
-	clang -O2 -Wall -Werror -g -target bpf -c sfunnel.c -o tc_sfunnel.o
+	clang $(CFLAGS) -target bpf -c sfunnel.c -o tc_sfunnel.o
 
 clean:
 	rm -rf *.o || true
