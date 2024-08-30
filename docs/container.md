@@ -15,6 +15,7 @@ Upon starting, it will:
 
 Some ENV variables control the behaviour of the container:
 
+* `$DEBUG`: dump BPF `printk` traces. :warning: severly affects performance!
 * `$SFUNNEL_RULESET`: list of rules. This variable has precedence over `/opt/sfunnel/src/ruleset`.
 * `$IFACES`: interfaces to load the BPF program. Default: "" (all).
 * `$N_ATTEMPTS`: number of attempts on loading the BPF program on an interface. Default 6.

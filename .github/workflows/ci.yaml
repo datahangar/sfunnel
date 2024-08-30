@@ -82,7 +82,7 @@ jobs:
             exit 1
           fi
 
-          grep "Using default ruleset" output || (echo "ERROR: unable to validate it loads default ruleset" && exit 1)
+          grep "Using the default ruleset" output || (echo "ERROR: unable to validate it loads default ruleset" && exit 1)
 
       - name: "[TEST] Run container with custom ruleset file..."
         run: |
@@ -96,7 +96,8 @@ jobs:
             exit 1
           fi
 
-          grep "Compiling sfunnel with custom ruleset" output || (echo "ERROR: unable to validate it loads custom file ruleset" && exit 1)
+          grep "Using a custom ruleset" output || (echo "ERROR: unable to validate it loads custom file ruleset" && exit 1)
+          grep "Recompiling sfunnel BPF program" output || (echo "ERROR: unable to validate it loads custom file ruleset" && exit 1)
           grep "$RULE" output || (echo "ERROR: unable to validate it loads custom file ruleset" && exit 1)
 
       - name: "[TEST] Run container with custom ruleset via SFUNNEL_RULESET..."
@@ -111,20 +112,45 @@ jobs:
           fi
 
           grep "SFUNNEL_RULESET='$RULE'" output || (echo "ERROR: unable to validate it loads custom ruleset via SFUNNEL_RULESET" && exit 1)
-          grep "Compiling sfunnel with custom ruleset" output || (echo "ERROR: unable to validate it loads custom ruleset via SFUNNEL_RULESET" && exit 1)
+          grep "Using a custom ruleset" output || (echo "ERROR: unable to validate it loads custom ruleset via SFUNNEL_RULESET" && exit 1)
+          grep "Recompiling sfunnel BPF program" output || (echo "ERROR: unable to validate it loads custom ruleset via SFUNNEL_RULESET" && exit 1)
           grep "$RULE" output || (echo "ERROR: unable to validate it loads custom ruleset via SFUNNEL_RULESET" && exit 1)
 
       - name: "[TEST] Run container with custom params ..."
         run: |
           set -o pipefail
-          docker run -e N_ATTEMPTS=7 -e RETRY_DELAY=3 -e IFACES="lo" --privileged sfunnel:latest 2>&1 | tee output
+          docker run -e N_ATTEMPTS=7 -e RETRY_DELAY=3 -e IFACES="lo" -e DEBUG=1 --privileged sfunnel:latest 2>&1 | tee output
           if [ ${PIPESTATUS[0]} -ne 0 ]; then
             echo "ERROR: container execution FAILED!"
             exit 1
           fi
+
+          grep "\$DEBUG='1'" output || (echo "ERROR: unable to validate it loads params (DEBUG)" && exit 1)
+          grep "\-DDEBUG=1" output || (echo "ERROR: unable to validate it loads params (DEBUG), CFLAGS" && exit 1)
           grep "\$N_ATTEMPTS='7'" output || (echo "ERROR: unable to validate it loads params (N_ATTEMPTS)" && exit 1)
           grep "\$RETRY_DELAY='3'" output || (echo "ERROR: unable to validate it loads params (RETRY_DELAY)" && exit 1)
           grep "\$IFACES='lo'" output || (echo "ERROR: unable to validate it loads params (IFACES)" && exit 1)
+          #Must recompile due to DEBUG=1
+          grep "Recompiling sfunnel BPF program" output || (echo "ERROR: unable to validate it loads params (DEBUG)" && exit 1)
+          grep "\-DDEBUG=1" output || (echo "ERROR: unable to validate it loads params (DEBUG, CFLAGS)" && exit 1)
+
+      - name: "[TEST] Run container with DEBUG=1 and custom ruleset ..."
+        run: |
+          RULE="ip saddr 127.0.0.1 udp dport 80 actions unfunnel udp"
+          echo "$RULE" > ruleset
+
+          set -o pipefail
+          docker run --privileged -e DEBUG=1 -v `pwd`/ruleset:/opt/sfunnel/src/ruleset sfunnel:latest 2>&1 | tee output
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "ERROR: container execution FAILED!"
+            exit 1
+          fi
+
+          grep "\$DEBUG='1'" output || (echo "ERROR: unable to validate it loads custom file ruleset DEBUG=1" && exit 1)
+          grep "\-DDEBUG=1" output || (echo "ERROR: unable to validate it loads custom file ruleset DEBUG=1, CFLAGS" && exit 1)
+          grep "Using a custom ruleset" output || (echo "ERROR: unable to validate it loads custom file ruleset DEBUG=1" && exit 1)
+          grep "Recompiling sfunnel BPF program" output || (echo "ERROR: unable to validate it loads custom file ruleset DEBUG=1" && exit 1)
+          grep "$RULE" output || (echo "ERROR: unable to validate it loads custom file ruleset DEBUG=1" && exit 1)
 
       - name: "Push to ghcr"
         run: |

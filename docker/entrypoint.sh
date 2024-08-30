@@ -4,6 +4,7 @@ set -e
 #set -x
 
 #Env variables
+DEBUG=${DEBUG:-0}
 N_ATTEMPTS=${N_ATTEMPTS:-6}
 RETRY_DELAY=${RETRY_DELAY:-3}
 
@@ -16,7 +17,7 @@ PROG=/opt/sfunnel/src/tc_sfunnel.o
 #either via file or ENV
 compile(){
 	cd /opt/sfunnel/src
-	make
+	DEBUG=${DEBUG} make
 }
 
 #$1: PROG
@@ -29,6 +30,7 @@ load_prog(){
 # Splash and useful info
 echo "[INFO] sfunnel $(cat /opt/sfunnel/VERSION)"
 echo "[INFO] ENVs:"
+echo "  \$DEBUG='$DEBUG'"
 echo "  \$N_ATTEMPTS='$N_ATTEMPTS'"
 echo "  \$RETRY_DELAY='$RETRY_DELAY'"
 echo "  \$IFACES='$IFACES'"
@@ -45,22 +47,27 @@ if [[ "$SFUNNEL_RULESET" != "" ]]; then
 	echo $SFUNNEL_RULESET > /opt/sfunnel/src/ruleset
 fi
 
-#Compile sfunnel only if new ruleset is specified
-if test -f /opt/sfunnel/src/ruleset; then
-	echo "[INFO] Compiling sfunnel with custom ruleset..."
+#Log the ruleset that will be used
+if [[ -f /opt/sfunnel/src/ruleset ]]; then
+	echo "[INFO] Using a custom ruleset..."
 	echo "==="
 	cat /opt/sfunnel/src/ruleset
 	echo "==="
-	compile
 else
-	echo "[INFO] Using default ruleset..."
+	echo "[INFO] Using the default ruleset..."
 	echo "==="
 	cat /opt/sfunnel/src/ruleset.default
 	echo "==="
+	cp /opt/sfunnel/src/ruleset.default /opt/sfunnel/src/ruleset
+fi
+
+#Compile sfunnel only if new ruleset or DEBUG=1
+if [[ "${DEBUG}" == "1" ]] || [[ -f /opt/sfunnel/src/ruleset ]]; then
+	echo "[INFO] Recompiling sfunnel BPF program..."
+	compile
 fi
 
 #Load
-
 echo ""
 echo -e "[INFO] Attaching BPF program '$PROG' to IFACES={$IFACES} using clsact qdisc...\n"
 for IFACE in $IFACES; do
