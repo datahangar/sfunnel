@@ -87,15 +87,14 @@ int ip4_funnel(struct __sk_buff* skb, __u8* eth, struct iphdr* ip, void* l4,
 
 	//Compute L4 funneling cksum as a diff over the old L4
 	diff = 0;
+
+	//Diff due to previous L4 HDR checksum 0ed for calc., now payload
 	if(old_l4_proto == IPPROTO_UDP){
 		old_udp = (struct udphdr *)((__u8*)ip + (ip->ihl * 4)
 								+ fhdr_size);
 		CHECK_SKB_PTR(skb, old_udp+1);
 
-		//Recover previous cksum
 		diff = csum_fold(old_udp->check);
-
-		//UDP checksum (0ed in UDP checksum calc, now payload)
 		__be16 udp_csum[2] = {0, old_udp->check};
 		diff = bpf_csum_diff(0, 0, (__be32*)&udp_csum, 4, diff);
 	}else if(old_l4_proto == IPPROTO_TCP){
@@ -103,10 +102,7 @@ int ip4_funnel(struct __sk_buff* skb, __u8* eth, struct iphdr* ip, void* l4,
 								+ fhdr_size);
 		CHECK_SKB_PTR(skb, old_tcp+1);
 
-		//Recover previous cksum
 		diff = csum_fold(old_tcp->check);
-
-		//UDP checksum (0ed in UDP checksum calc, now payload)
 		__be16 tcp_csum[2] = {old_tcp->check, 0};
 		diff = bpf_csum_diff(0, 0, (__be32*)&tcp_csum, 4, diff);
 	}
@@ -184,7 +180,7 @@ int ip4_unfunnel(struct __sk_buff* skb, struct iphdr* ip, void* l4,
 							ip->protocol, proto,
 							skb->len);
 
-	//Substract tcp HDR and recalc check
+	//Substract funneling HDR and recalc check
 	union ttl_proto old_ttl = *(union ttl_proto*)&ip->ttl;
 	ip->protocol = proto;
 	__s64 diff = bpf_csum_diff((__be32*)&old_ttl, 4, (__be32*)&ip->ttl, 4,
@@ -194,7 +190,7 @@ int ip4_unfunnel(struct __sk_buff* skb, struct iphdr* ip, void* l4,
 		return TC_ACT_SHOT;
 	}
 
-	//Decrease tot_len with TCP hdr
+	//Decrease tot_len with funneling hdr size
 	struct ver_ihl_tos_totlen old_totlen = *(struct ver_ihl_tos_totlen*)ip;
 	ip->tot_len = bpf_htons(bpf_ntohs(ip->tot_len) - fhdr_size);
 	diff = bpf_csum_diff((__be32*)&old_totlen, 4, (__be32*)ip, 4, diff);
@@ -203,7 +199,7 @@ int ip4_unfunnel(struct __sk_buff* skb, struct iphdr* ip, void* l4,
 		return TC_ACT_SHOT;
 	}
 
-	//Modify checksum and remove TCP hdr
+	//Modify checksum and remove funneling hdr
 	__u32 l3_off = (__u8*)ip - (__u8*)SKB_GET_ETH(skb);
 	int rc = bpf_l3_csum_replace(skb, l3_off + offsetof(struct iphdr, check),
 							0,
