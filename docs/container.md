@@ -22,6 +22,8 @@ container:
 
 * `$SFUNNEL_RULESET`: the list of rules. This variable takes precedence over `/opt/sfunnel/src/ruleset`.
 * `$IFACES`: interfaces to load the BPF program to. Default: "" (all).
+* `DIRECTION`: specifies the direction {`ingress`, `egress`, `both`} for attaching the BPF program.
+   For most use-cases, ingress is sufficient. Default: "ingress".
 * `$DEBUG`: enable BPF `printk` traces. :warning: severly affects performance!
 * `$N_ATTEMPTS`: number of attempts to load the BPF program on an interface. Default is 6.
 * `$RETRY_DELAY`: delay between retry attemps. Default is 3.

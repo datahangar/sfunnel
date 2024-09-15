@@ -152,6 +152,60 @@ jobs:
           grep "Recompiling sfunnel BPF program" output || (echo "ERROR: unable to validate it loads custom file ruleset DEBUG=1" && exit 1)
           grep "$RULE" output || (echo "ERROR: unable to validate it loads custom file ruleset DEBUG=1" && exit 1)
 
+      - name: "[TEST] Run container with IFACES=invalid ..."
+        run: |
+          set -o pipefail
+          set +e
+          docker run --privileged -e DEBUG=1 -e IFACES=invalid sfunnel:latest 2>&1 | tee output
+          if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            echo "ERROR: container succeded when it should have FAILED!"
+            exit 1
+          fi
+          set -e
+
+      - name: "[TEST] Run container with DIRECTION=invalid ..."
+        run: |
+          set -o pipefail
+          set +e
+          docker run --privileged -e DEBUG=1 -e DIRECTION=invalid sfunnel:latest 2>&1 | tee output
+          if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            echo "ERROR: container succeded when it should have FAILED!"
+            exit 1
+          fi
+          set -e
+          grep "FATAL: Invalid traffic direction" output || (echo "ERROR: unable to validate container correctly fails when DIRECTION is invalid" && exit 1)
+
+      - name: "[TEST] Run container with DIRECTION=ingress ..."
+        run: |
+          set -o pipefail
+          docker run --privileged -e DEBUG=1 -e DIRECTION=ingress sfunnel:latest 2>&1 | tee output
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "ERROR: container execution FAILED!"
+            exit 1
+          fi
+          (grep "Attaching BPF program" output | grep "direction 'ingress'") || (echo "ERROR: unable to validate container attaches to DIRECTION=ingress" && exit 1)
+
+      - name: "[TEST] Run container with DIRECTION=egress ..."
+        run: |
+          set -o pipefail
+          docker run --privileged -e DEBUG=1 -e DIRECTION=egress sfunnel:latest 2>&1 | tee output
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "ERROR: container execution FAILED!"
+            exit 1
+          fi
+          (grep "Attaching BPF program" output | grep "direction 'egress'") || (echo "ERROR: unable to validate container attaches to DIRECTION=egress" && exit 1)
+
+      - name: "[TEST] Run container with DIRECTION=both ..."
+        run: |
+          set -o pipefail
+          docker run --privileged -e DEBUG=1 -e DIRECTION=both sfunnel:latest 2>&1 | tee output
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "ERROR: container execution FAILED!"
+            exit 1
+          fi
+          (grep "Attaching BPF program" output | grep "direction 'ingress'") || (echo "ERROR: unable to validate container attaches to DIRECTION=both" && exit 1)
+          (grep "Attaching BPF program" output | grep "direction 'egress'") || (echo "ERROR: unable to validate container attaches to DIRECTION=both" && exit 1)
+
       - name: "Push to ghcr"
         run: |
           cd sfunnel
