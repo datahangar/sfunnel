@@ -1,11 +1,11 @@
 # Multi-port session affinity in K8s: making `nfacctd` K8s-ready with eBPF
 
-This the use case initiated this small project [[1](https://cilium.slack.com/archives/C1MATJ5U5/p1723579808788789)].
+This use case initiated this small project [[1](https://cilium.slack.com/archives/C1MATJ5U5/p1723579808788789)].
 
 ## Context
 ### Pmacct and Datahangar projects
 
-[pmacct](https://github.com/pmacct/pmacct) is probably _the_ most widely
+[pmacct](https://github.com/pmacct/pmacct) is probably the most widely
 used open-source project for passive network monitoring. The Network Flow
 ACCounting Daemon (`nfacctd`) collects flowlogs ([IPFIX](https://en.wikipedia.org/wiki/IP_Flow_Information_Export)/
 [Netflow](https://en.wikipedia.org/wiki/NetFlow)/[Sflow](https://en.wikipedia.org/wiki/SFlow)),
@@ -20,18 +20,18 @@ as a BGP passive peer for one or more network routers:
 
 ![A network router connecting to nfacctd](images/single_router_nfacctd.svg)
 
-[datahangar](https://github.com/datahangar/) was initially created as an
-end-to-end(E2E) testing framework for pmacct, focusing on its containerization
-and deployment within Kubernetes.
+On the other hand, [datahangar](https://github.com/datahangar/) was initially
+created as an end-to-end(E2E) testing framework for pmacct, focusing on its
+containerization and deployment in Kubernetes.
 
 While it still fulfills [this role](https://github.com/pmacct/pmacct/blob/master/.github/workflows/e2e_dh.yaml),
-datahangar is evolving to establish a reference architecture for a
-complete network data pipeline using readily available open-source components in
-Kubernetes.
+datahangar is evolving into establishing a reference architecture for a
+complete network data pipeline running in Kubernetes using readily available
+open-source components.
 
 ### Connectivity requirements
 
-BGP and flowlogs traffic must:
+For `nfacctd` to function, BGP and flowlog traffic must:
 
 * Preserve source IP address. Source IP is used to deduce the router's identity.
 * End up in the same Pod (replica).
@@ -69,10 +69,10 @@ spec:
   externalTrafficPolicy: Local #Do not SNAT traffic
 ```
 
-Testing revealved that IP preservation worked (as long as you have at least one
+Testing revealed that IP preservation worked (as long as you have at least one
 pod on each worker-node), but session affinity didn't function with multiple
 replicas or multiple worker nodes... :disappointed:. Traffic coming from a router
-as hitting different Pods, including Pods in other worker nodes:
+was hitting different Pods, including Pods in other worker nodes:
 
 ![BPG and Flowlogs traffic end up in different pods](images/lb_traffic_no_affinity.svg)
 
@@ -82,7 +82,7 @@ project :sweat_smile:.
 
 ## :bulb: What if...
 
-What if could modify the traffic _before_ hitting the Network Load Balancer (NLB),
+What if traffic could be modified  _before_ hitting the Network Load Balancer (NLB),
 disguising it as BGP (`TCP/179`) so that `sessionAffinity: ClientIP` could
 do its job, and then "undo" this modification in the Pod just before delivering
 the traffic to `nfacctd`? Humm... this _might_ work.
@@ -103,24 +103,25 @@ TCP header, and sets:
   One example is `540` (`UUCP`).
 * `tcp.flags`, `ack`, `seq` and `urg` to fixed values.
 
-_Note: the term [funneling](../funneling.md) is used to distinguish it from real tunneling.
+_Note: the term [funneling](../funneling.md) is used to distinguish it from real tunneling._
 
 On the Pod side (Pod's network namespace), the eBPF program reverses this operation
-by matching `tcp dport 179 sport 540` and popping the funneling header. The following
+by matching `tcp dport 179 sport 540` and popps the funneling header. The following
 diagram illustrates the interception points for the VPC deployment type:
 
 ![VPC deployment with sfunnel](images/deployment_ebpf_sfunnel_vpc.svg)
 
-_Note: funneling could also occur in the VPC GW, depending on its nature_
+_Note: funneling could also occur in the VPC GW, depending on the nature of the
+gateway itself._
 
 ### XDP vs TC
 
 XDP generally offers better performance than TC programs, but only allows a single
-XDP program per interface. For simplicity and to enable the use of `fwmark`,
+program per interface. For simplicity and to enable the use of `fwmark`,
 the TC approach was chosen.
 
 It shouldn't be complicated, though, to improve the code to support both. This
-might be interesting particularly for the funneling role.
+might be particularly interesting for the funneling role.
 
 ### Show me the code! :honeybee:
 
@@ -162,7 +163,7 @@ The K8s deployment (or statefulset etc.), needed to be extended:
 +           path: /sys/fs/bpf
 ```
 
-The funneled ports could be then removed from the service definition
+The funneled ports could then be removed from the service definition
 (e.g. UDP 4739).
 
 #### Loading funneler (`tc_funnel`)
@@ -197,7 +198,7 @@ Considerations:
 * **Funnelers**: Flowlogs traffic needs to be modified before reaching
   the NLB, which can be done in the VPC gateway or before it reaches the public
   cloud. It can also be done by pointing routers to an intermediate "flowlogs proxy"
-  and then then DNATing the traffic to the K8s Service.
+  and then DNATing the traffic to the K8s Service.
 * **[MTU considerations](../funneling.md#mtu)** apply, but are easily solved
   by adjusting the router configuration for IPFIX/NetFlow/sFlow as discussed
   before.

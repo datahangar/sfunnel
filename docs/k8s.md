@@ -27,7 +27,7 @@ same Worker Node.
 In turn, CNIs supporting `sessionAffinity: ClientIP` will send traffic for the
 same tuple to the same Pod (until a rescheduled event happens). Once traffic enters
 the Pod's network namespace, it will be "unfunneled" (demultiplexed) before
-being terminated by the Kernel and delivered to sockets.
+being terminated by the Kernel and delivered to the application's sockets.
 
 ### `NodePort`
 
@@ -54,7 +54,7 @@ This is an interesting one, and not anticipated, as the
 You can funnel traffic from multiple `ClusterIP`(non headless) services -
 with multiple ports - into a single protocol+port, as long as they are backed
 by the same pods. This effectively routes all flows (of that service) from a
-consumer Pod A talk to the same backend Pod B until there is a rescheduling.
+consumer Pod A to the same backend Pod B.
 
 An example:
 
@@ -73,8 +73,7 @@ tcp dport 80 sport 541 unfunnel udp
 
 ## Supported CNIs
 
-Any CNI and LB honouring `sessionAffinity: ClientIP` should work
-out of the box.
+Any CNI and LB honouring `sessionAffinity: ClientIP` should work out of the box.
 
 `sfunnel` has been tested with Cilium v1.15 and v1.16.
 
@@ -84,7 +83,8 @@ out of the box.
 container will attach sfunnel BPF program and exit.
 
 In the event of a Pod being restarted or teared down, the BPF subsystem will
-automatically unload the BPF program during virtual interface destruction.
+automatically unload the BPF program during virtual interface destruction, when
+the ref_cnt falls to 0.
 
 ## Security considerations
 
@@ -108,4 +108,4 @@ E.g.:
 
 ##### [1] Example
 
-See [example](../example/k8s/) for a small example.
+Check [this example](../example/k8s/).
