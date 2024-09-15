@@ -88,7 +88,10 @@ automatically unload the BPF program during virtual interface destruction.
 
 ## Security considerations
 
-`sfunnel` requires to run `privileged: true` to load BPF TC programs.
+`sfunnel` requires to run with elevated privileges, specifically:
+
+* Capabilities: `CAP_BPF`, `CAP_NET_ADMIN` and `CAP_SYS_ADMIN`.
+* Mount `/sys/fs/bpf` in the init container.
 
 ### Digest
 

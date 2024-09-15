@@ -64,9 +64,9 @@ container along with the [rules](docs/rules.md) in `SFUNNEL_RULESET`:
 +              value: ip tcp dport 80 sport 540 actions unfunnel tcp
 +          image: ghcr.io/datahangar/sfunnel:0.0.4@sha256:78c7c8cdd7a299781a7139f28cd5cffef9e17866d2dcb62d049bad0f0a059f2f
 +          securityContext:
-+            privileged: true
++            privileged: false
 +            capabilities:
-+              add: [BPF, NET_ADMIN]
++              add: [BPF, NET_ADMIN, SYS_ADMIN]
 +          volumeMounts:
 +            - name: bpffs
 +              mountPath: /sys/fs/bpf
@@ -101,11 +101,11 @@ for real world examples.
 ## Requirements
 
 * In Kubernetes:
-  * Privileged init container: not for everyone.
+  * Privileged init container (`CAP_BPF`, `CAP_NET_ADMIN`, `CAP_SYS_ADMIN`)
   * [eBPF](https://ebpf.io/)-enabled kernel, with support for `clsact` and `direct-action`.
   * Proper [MTU configuration](docs/funneling.md#mtu) (20 bytes for TCP, 8 for UDP).
 * On the funneling side:
-  * Permissions to spawn `sfunnel` (priviliged).
+  * Permissions to spawn `sfunnel` (same caps as before).
   * Route or proxy traffic to be funneled. More on this [here](docs/funneling.md)
   * Proper [MTU configuration](docs/funneling.md#mtu) (20 bytes for TCP, 8 for UDP).
 

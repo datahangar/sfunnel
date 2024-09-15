@@ -19,9 +19,9 @@ spec:
             - name: SFUNNEL_RULESET
               value: ip tcp dport 80 sport 540 actions unfunnel tcp
           securityContext:
-            privileged: true
+            privileged: false
             capabilities:
-               add: [BPF, NET_ADMIN]
+               add: [BPF, NET_ADMIN, SYS_ADMIN]
           volumeMounts:
             - name: bpffs
               mountPath: /sys/fs/bpf
