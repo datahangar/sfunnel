@@ -1,27 +1,33 @@
 # `sfunnel` container
 
-The `sfunnel` container is meant to run as an initContainer() or as an ephemeral
-container (in `docker --network="host"`).
+The `sfunnel` container is designed to load the `tc_funnel` eBPF program onto
+specified network interface and then immediately exit. It can be deployed as
+an [init container in K8s](https://kubernetes.io/docs/concepts/workloads/pods/init-containers/)
+or as a short-lived (ephemeral) container in Docker (e.g. to load funneling rules
+in the host namespace `docker --network="host"`).
 
-Upon starting, it will:
+When the container starts, it performs the following actions:
 
-1. Recompile the BPF program if a custom ruleset is provided. Ruleset is static
-   at compile-time, so no maps are needed. Mind the [ruleset limits](rules.md#scalability).
-1. For each interface in `$IFACES`:
-  * it creates a `clasct` qdisc
-  * it attached the BPF program to it
+1. Recompiles the BPF program if a custom ruleset is provided or `DEBUG`
+   mode is enabled. The ruleset is static at compile-time, so no [BPF maps](https://docs.kernel.org/bpf/maps.html)
+   are needed. Mind the [ruleset limitations](rules.md#scalability).
+1. For each interface specified in `$IFACES`, the container will:
+  * create a `clasct` qdisc
+  * Attach the BPF program to ithe qdisc
 
 ## Environment variables
 
-Some ENV variables control the behaviour of the container:
+Several environment variables can be used to control the behaviour of the `sfunnel`
+container:
 
-* `$DEBUG`: dump BPF `printk` traces. :warning: severly affects performance!
-* `$SFUNNEL_RULESET`: list of rules. This variable has precedence over `/opt/sfunnel/src/ruleset`.
-* `$IFACES`: interfaces to load the BPF program. Default: "" (all).
-* `$N_ATTEMPTS`: number of attempts on loading the BPF program on an interface. Default 6.
-* `$RETRY_DELAY`: delay between attemps. Default: 3.
+* `$SFUNNEL_RULESET`: the list of rules. This variable takes precedence over `/opt/sfunnel/src/ruleset`.
+* `$IFACES`: interfaces to load the BPF program to. Default: "" (all).
+* `$DEBUG`: enable BPF `printk` traces. :warning: severly affects performance!
+* `$N_ATTEMPTS`: number of attempts to load the BPF program on an interface. Default is 6.
+* `$RETRY_DELAY`: delay between retry attemps. Default is 3.
 
 ## Loading Ruleset via file
 
-The ruleset can be loaded via configmap/docker volume by creating the file `ruleset`
-in `/opt/sfunnel/src`. This file has precedence over `/opt/sfunnel/src/ruleset.defaults`.
+The ruleset can be loaded via configmapi (K8s) or a docker volume by creating the
+`ruleset` file in the `/opt/sfunnel/src` directory. This file takes precedence
+over `/opt/sfunnel/src/ruleset.defaults`.

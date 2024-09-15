@@ -1,4 +1,4 @@
-# sfunnel: multi-flow K8s pod session affinity
+# sfunnel: multi-port/multi-flow session affinity in Kubernetes
 
 `sfunnel` is an [eBPF](https://ebpf.io/) tool designed to [_funnel_](docs/funneling)
 multiple traffic flows through a single [Kubernetes service](https://kubernetes.io/docs/concepts/services-networking/service/)
@@ -10,7 +10,6 @@ See the original use-case [here](docs/use-cases/network-telemetry-nfacctd.md).
 ## At a glance
 
 Example where `TCP/8080` and `TCP/443` traffic is funneled through `TCP/80`.
-
 
 Remove _ports_ from the K8s service and e.g. deployment. Add the `sfunnel`
 container along with the [rules](docs/rules.md) in `SFUNNEL_RULESET`:
@@ -102,11 +101,11 @@ for real world examples.
 ## Requirements
 
 * In Kubernetes:
-  * Privileged (`BPF`,`NET_ADMIN`, `SYS_ADMIN` capabilities_.
+  * Privileged init container: not for everyone.
   * [eBPF](https://ebpf.io/)-enabled kernel, with support for `clsact` and `direct-action`.
   * Proper [MTU configuration](docs/funneling.md#mtu) (20 bytes for TCP, 8 for UDP).
 * On the funneling side:
-  * Permissions to spawn `sfunnel`.
+  * Permissions to spawn `sfunnel` (priviliged).
   * Route or proxy traffic to be funneled. More on this [here](docs/funneling.md)
   * Proper [MTU configuration](docs/funneling.md#mtu) (20 bytes for TCP, 8 for UDP).
 

@@ -1,14 +1,14 @@
 # Funneling rules
 
-Rules have the following format:
+Rules follow this format:
 
 ```
 <list of match conditions> actions <list of actions>
 ```
 
-Rules are processed top to bottom, in the strict order they are defined.
-Total ordering is therefore guaranteed. Mind the [limits](#scalability) in the
-number of rules.
+Rules are processed sequentially from top to bottom, in the exact order they are
+defined. This ensures a strict total ordering of rule execution. Mind the
+[limits](#scalability) regarding the number of rules.
 
 ## Syntax
 ### Match conditions
@@ -105,21 +105,21 @@ Drop the packet.
 
 ### Number of rules
 
-The current implementation is designed to handle less than 5 rules.
+The current implementation is designed to handle fewer than 5 rules.
 
-The use of statically allocated rules is a design choice. It doesn't require any
-BPF map orchestration ([see this](container.md#life-cycle-and-garbage-collection)).
-There are limits, though, in the total amount of global data of a BPF program
-which are enforced by the verifier. Experimentally, this translates today in
-~500 IPv4 rules.
+The use of statically allocated rules is an intentional design choice, as it
+eliminates the need to orchestrate BPF maps ([see details here](container.md#life-cycle-and-garbage-collection)).
+However, there are limits to the total amount of global data that a BPF program
+can handle, which are enforced by the verifier. Experimentally, this translates
+(today) in ~500 IPv4 rules.
 
-The lookup algorithm is also as simple as a linear lookup, which scales _very_
-poorly with few tenths of rules.
+The lookup algorithm is a simple linear search, which scales _very_ poorly once
+the number of rules exceeds few tenths of rules.
 
 There hasn't been (yet) a use-case for it, but if you are interested in
-optimizing the lookup, or even conditionally (compile-time) use external maps,
-you can look into [lookup.h](../src/lookup.h).
+optimizing the lookup, or even conditionally (compile-time) use external BPF
+maps, you can look into [lookup.h](../src/lookup.h) and send a PR.
 
 ---
 
-_[1] To the best of my ability. AFAIK, a library to parse nftable filters doesn't exist yet in Python3._
+_[1] To the best of my ability. AFAIK, there is no existing Python3 library to parse nftable filters._

@@ -1,18 +1,18 @@
 # _Funneling? Isn't it just tunneling_
 
-`sfunnel` pushes a new L4 header (TCP or UDP) between the IP and the existing L4
-header. It is a form of pseudo-tunneling, and suffers from the same
-[MTU issues](#mtu) as a any tunnel.
+`sfunnel` pushes a new Layer 4 header (TCP or UDP) between the IP and the existing L4
+header. It is a form of pseudo-tunneling, and faces the same [MTU issues](#mtu)
+as with any tunnel.
 
-Tunnels usually have a dedicated L4 proto+port, and _only_ tunneled traffic is
-received on that port. This is not the case when _funneling_, as funneled
-traffic will flow alongside with the real traffic, hence the reason to use a
-different term to avoid confusion.
+Tunnels usually have a dedicated L4 port, meaning only tunneled traffic is
+received on that specific protocol+port. This is not the case when _funneling_,
+as funneled traffic coexists with the regular traffic on the port, which is why
+the term "funneling" is used to avoid confusion.
 
-For example, when funneling some UDP traffic on top TCP port 80, _some_ traffic
-flowing will still be WEB traffic, and will be left untouched, while UDP
-traffic on top will be unfunneled (decapped or demultiplexed) and delivered as
-UDP traffic transparently.
+For instance, when funneling some UDP traffic over TCP port 80, regular web
+traffic will continue to flow as usual and remain unaffected, while the funneled
+UDP traffic will be unfunneled (decapsulated or demultiplexed) and delivered
+to the application transparently as UDP traffic.
 
 ## The life of a packet
 
@@ -69,9 +69,10 @@ Ether()/IP()/UDP(dport=4739)/IPFIX()/...
 
 ## MTU
 
-Funneling suffers from the same problems as any encapsulation (tunneling). The
-MTU should be sufficiently big to accomodate the extra 20 bytes for TCP funneling
-or 8 bytes for UDP funneling.
+Funneling faces the same challenges as any encapsulation (tunneling) method. The
+MTU must be large enough to accomodate the additional overhead: 20 bytes for TCP
+funneling or 8 bytes for UDP funneling.
 
-Make sure you adjust this. An [upcoming feature](next_steps.md) will be to check
-for MTU exceeding funneled packets and raise alarms (`printk()`).
+Ensure that your MTU settings are adjusted accordingly. An [upcoming feature](next_steps.md)
+will allow checking for funneled packets that exceeed the MTU and raising alerts
+via `printk()`.
