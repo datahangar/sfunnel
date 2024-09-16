@@ -42,7 +42,7 @@ jobs:
       - name: "Run tests..."
         run: cd sfunnel/test && make VERBOSE=1
 
-  docker_build_and_publish:
+  docker_build_test_publish:
     needs: [make_check]
     runs-on: ubuntu-22.04
     steps:
