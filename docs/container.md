@@ -24,6 +24,11 @@ container:
 * `$IFACES`: interfaces to load the BPF program to. Default: "" (all).
 * `DIRECTION`: specifies the direction {`ingress`, `egress`, `both`} for attaching the BPF program.
    For most use-cases, ingress is sufficient. Default: "ingress".
+
+### Advanced
+
+* `CLEAN`: when set to `1`, instead of loading sfunnel, remove **all** TC eBPF
+   programs attached to `$DIRECTION` on `$IFACES`. Default: 0.
 * `$DEBUG`: enable BPF `printk` traces. :warning: severly affects performance!
 * `$N_ATTEMPTS`: number of attempts to load the BPF program on an interface. Default is 6.
 * `$RETRY_DELAY`: delay between retry attemps. Default is 3.

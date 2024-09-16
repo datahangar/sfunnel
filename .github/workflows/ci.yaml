@@ -206,6 +206,28 @@ jobs:
           (grep "Attaching BPF program" output | grep "direction 'ingress'") || (echo "ERROR: unable to validate container attaches to DIRECTION=both" && exit 1)
           (grep "Attaching BPF program" output | grep "direction 'egress'") || (echo "ERROR: unable to validate container attaches to DIRECTION=both" && exit 1)
 
+      - name: "[TEST] Run container with CLEAN=1 ..."
+        run: |
+          set -o pipefail
+          #Create a pair of veths
+          sudo ip link add type veth
+          sudo ip link set up dev veth0
+          sudo ip link set up dev veth1
+
+          #First attach to veth
+          docker run --privileged --network=host -e DEBUG=1 -e DIRECTION=both -e IFACES=veth0 sfunnel:latest 2>&1 | tee output
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "ERROR: container execution FAILED!"
+            exit 1
+          fi
+          (tc filter show dev veth0 ingress | grep sfunnel) || (echo "ERROR: unable to validate container attaches to ingress" && exit 1)
+          (tc filter show dev veth0 egress | grep sfunnel)  || (echo "ERROR: unable to validate container attaches to egress" && exit 1)
+
+          #Run CLEAN=1
+          docker run --privileged --network=host -e DEBUG=1 -e CLEAN=1 -e DIRECTION=both -e IFACES=veth0 sfunnel:latest 2>&1 | tee output
+          [[ "$(tc filter show dev veth0 ingress)" == "" ]] || (echo "ERROR: unable to validate container removes BPF programs from ingress" && exit 1)
+          [[ "$(tc filter show dev veth0 egress)" == "" ]] || (echo "ERROR: unable to validate container removes BPF programs from egress" && exit 1)
+
       - name: "Push to ghcr"
         run: |
           cd sfunnel

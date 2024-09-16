@@ -4,6 +4,8 @@ set -e
 
 #Env variables
 DEBUG=${DEBUG:-0}
+CLEAN=${CLEAN:-0}
+
 N_ATTEMPTS=${N_ATTEMPTS:-6}
 RETRY_DELAY=${RETRY_DELAY:-3}
 
@@ -41,6 +43,14 @@ load_prog(){
 	fi
 
 	echo ""
+}
+
+#$1: PROG
+#$2: IFACE
+#$3: direction {ingress, egress}
+clean_prog(){
+	tc filter show dev ${2} ${3}
+	tc filter del dev ${2} ${3}
 }
 
 # Check direction is valid
@@ -99,20 +109,32 @@ if [[ "${DEBUG}" == "1" ]] || [[ -f /opt/sfunnel/src/ruleset ]]; then
 	compile
 fi
 
-#Load
 echo ""
-echo -e "[INFO] Attaching BPF program '${PROG}' to IFACES={$IFACES} using clsact qdisc...\n"
+
+if [[ "${CLEAN}" == "1" ]]; then
+	OP=clean_prog
+	OP_STR=clean
+	echo -e "[INFO] Cleaning ALL BPF programs on IFACES={$IFACES} DIRECTION=${DIRECTION} using clsact qdisc...\n"
+else
+	OP=load_prog
+	OP_STR=attach
+	echo -e "[INFO] Attaching BPF program '${PROG}' on IFACES={$IFACES} DIRECTION=${DIRECTION} using clsact qdisc...\n"
+fi
+
 for IFACE in ${IFACES}; do
-	#Create clsact qdisc once; allow to reuse existing one
-	tc qdisc add dev ${IFACE} clsact || echo "[WARNING] unable to create clsact; already present?"
+	if [[ "${CLEAN}" != "1" ]]; then
+		#Create clsact qdisc once; allow to reuse existing one
+		tc qdisc add dev ${IFACE} clsact || echo "[WARNING] unable to create clsact; already present?"
+	fi
 
 	if [[ ${DIRECTION} != "egress" ]]; then
-		load_prog ${PROG} ${IFACE} ingress
+		${OP} ${PROG} ${IFACE} ingress
 	fi
 	if [[ ${DIRECTION} != "ingress" ]]; then
-		load_prog ${PROG} ${IFACE} egress
+		${OP} ${PROG} ${IFACE} egress
 	fi
 
-	echo -e "[INFO] Successfully attached BPF program(s) to '${IFACE}'.\n"
+	echo -e "[INFO] Successfully ${OP_STR}ed BPF program(s) on '${IFACE}' DIRECTION=${DIRECTION}.\n"
 done
-echo "[INFO] Successfully attached '${PROG}' to interfaces {${IFACES}}"
+
+echo "[INFO] Successfully ${OP_STR}ed BPF program(s) on interfaces {${IFACES}} DIRECTION=${DIRECTION}"
