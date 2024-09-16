@@ -276,7 +276,7 @@ static inline int proc_ip4(struct __sk_buff* skb, __u8* eth, struct iphdr* ip){
 }
 
 SEC("funnel")
-int tc_ingress(struct __sk_buff *skb){
+int tc_sfunnel(struct __sk_buff *skb){
 	struct ethhdr *eth = (void *)(unsigned long long)skb->data;
 	CHECK_SKB_PTR(skb, eth+1);
 
