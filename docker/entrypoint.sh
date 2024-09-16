@@ -1,7 +1,6 @@
 #!/bin/bash
 
 set -e
-#set -x
 
 #Env variables
 DEBUG=${DEBUG:-0}
@@ -40,6 +39,11 @@ echo "  Debian: $(cat /etc/debian_version)"
 echo "  python3: $(python3 --version)"
 echo "  clang: $(clang --version)"
 echo "  iproute2: $(ip -V)"
+
+# Enable full debug
+if [[ "${DEBUG}" == "1" ]]; then
+	set -x
+fi
 
 #If SFUNNEL_RULESET is defined, create the file
 if [[ "$SFUNNEL_RULESET" != "" ]]; then
