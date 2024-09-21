@@ -14,7 +14,7 @@ spec:
     spec:
       initContainers:
         - name: sfunnel-init
-          image: ghcr.io/datahangar/sfunnel:0.0.4@sha256:78c7c8cdd7a299781a7139f28cd5cffef9e17866d2dcb62d049bad0f0a059f2f
+          image: ghcr.io/datahangar/sfunnel:0.0.6@sha256:be12287922d9b26ad3a77403957a6b1c4093a1e97dec44e0d2d3308a91596c03
           env:
             - name: SFUNNEL_RULESET
               value: ip tcp dport 80 sport 540 actions unfunnel tcp
