@@ -228,6 +228,38 @@ jobs:
           [[ "$(tc filter show dev veth0 ingress)" == "" ]] || (echo "ERROR: unable to validate container removes BPF programs from ingress" && exit 1)
           [[ "$(tc filter show dev veth0 egress)" == "" ]] || (echo "ERROR: unable to validate container removes BPF programs from egress" && exit 1)
 
+      - name: "[TEST] Run container with NETNS=test_ns ..."
+        run: |
+          set -o pipefail
+          #Create a pair of veths
+          sudo ip netns add test_ns
+          sudo ip netns exec test_ns ip link set up dev lo
+
+          #First run with an invalid netns, make sure it fails
+          set +e
+          docker run --privileged --network=host -v /var/run/netns:/var/run/netns -e NETNS=test_ns_invalid -e DEBUG=1 -e IFACES=lo sfunnel:latest 2>&1 | tee output
+          if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            echo "ERROR: container succeded when it should have FAILED!"
+            exit 1
+          fi
+
+          #Then run it with a valid netns but invalid IFACE, and make sure it propagates the error code
+          docker run --privileged --network=host -v /var/run/netns:/var/run/netns -e NETNS=test_ns -e DEBUG=1 -e IFACES=lo2 sfunnel:latest 2>&1 | tee output
+          if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            echo "ERROR: container succeded when it should have FAILED!"
+            exit 1
+          fi
+          set -e
+
+          #Successful run
+          docker run --privileged --network=host -v /var/run/netns:/var/run/netns -e NETNS=test_ns -e DEBUG=1 -e IFACES=lo sfunnel:latest 2>&1 | tee output
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "ERROR: container execution FAILED!"
+            exit 1
+          fi
+          [[ "$(sudo ip netns exec test_ns tc filter show dev lo ingress | grep sfunnel)" != "" ]] || (echo "ERROR: unable to validate container attaches to ingress when NETNS is set" && exit 1)
+          (grep "\$DEBUG='1'" output) || (echo "ERROR: unable to validate env. variables are passed to the NETNS execution" && exit 1)
+
       - name: "Push to ghcr"
         run: |
           cd sfunnel

@@ -27,6 +27,9 @@ container:
 
 ### Advanced
 
+* `NETNS`: if set, attach the BPF program to `$IFACES` in the `$NETNS` network namespace
+   instead of the default container's network namespace. Default: "" (container namespace).
+   Note: `/var/run/netns` must be mounted as a volume.
 * `CLEAN`: when set to `1`, instead of loading sfunnel, remove **all** TC eBPF
    programs attached to `$DIRECTION` on `$IFACES`. Default: 0.
 * `$DEBUG`: enable BPF `printk` traces. :warning: severly affects performance!

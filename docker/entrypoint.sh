@@ -2,6 +2,26 @@
 
 set -e
 
+#First thing, invoke itself into the right NETNS
+if [[ ${NETNS} != "" ]]; then
+	if [[ ${_NETNS} == "" ]]; then
+		echo "Entering netns='${NETNS}'..."
+		export _NETNS="${NETNS}"
+		env > .env
+		if [[ "${DEBUG}" == "1" ]]; then
+			cat .env
+		fi
+		ip netns exec ${NETNS} bash -c "${0} ${@}"
+		exit $?
+	else
+		echo "In netns='${NETNS}'..."
+		source .env
+		if [[ "${DEBUG}" == "1" ]]; then
+			env
+		fi
+	fi
+fi
+
 #Env variables
 DEBUG=${DEBUG:-0}
 CLEAN=${CLEAN:-0}
@@ -12,6 +32,7 @@ RETRY_DELAY=${RETRY_DELAY:-3}
 DIRECTION=${DIRECTION:-ingress}
 _IFACES=$(ls /sys/class/net | tr "\n" " " | sed 's/\s*$//g')
 IFACES=${IFACES:-$_IFACES}
+NETNS=${NETNS:-}
 
 PROG=/opt/sfunnel/src/tc_sfunnel.o
 
@@ -71,6 +92,7 @@ echo "  \$DIRECTION='${DIRECTION}'"
 echo "  \$N_ATTEMPTS='${N_ATTEMPTS}'"
 echo "  \$RETRY_DELAY='${RETRY_DELAY}'"
 echo "  \$IFACES='${IFACES}'"
+echo "  \$NETNS='${NETNS}'"
 echo "[INFO] Container info:"
 echo "  Kernel: $(uname -a)"
 echo "  Debian: $(cat /etc/debian_version)"
