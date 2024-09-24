@@ -1,136 +1,154 @@
 import pytest
 import time
-from scapy.all import sniff, sendp, Ether, IP, UDP, TCP, Raw
 import threading
+import subprocess
+from scapy.all import *
+import logging
+import copy
 
-#43 bytes < 64
-pkts_43 = [
-    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=4739)/Raw("ABC"),
-    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=2055)/Raw("ABC"),
-    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=6343)/Raw("ABC"),
-
-    #Fake IPFIX over TCP
-    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/TCP(sport=65000, dport=4739)/Raw("ABC")
-]
-
-#Multiple of 4
-pkts_44 = [
-    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=4739)/Raw("ABCD"),
-    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=2055)/Raw("ABCD"),
-    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=6343)/Raw("ABCD"),
-
-    #Fake IPFIX over TCP
-    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/TCP(sport=65000, dport=4739)/Raw("ABCD")
-]
-
-#1041 bytes
-pkts_1041 = [
-    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=4739)/Raw("X"*1001),
-    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=2055)/Raw("X"*1001),
-    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/UDP(sport=65000, dport=6343)/Raw("X"*1001),
-
-    #Fake IPFIX over TCP
-    Ether()/IP(src="11.1.1.1", dst="10.0.0.2")/TCP(sport=65000, dport=4739)/Raw("X"*1001)
-]
-
-all_pkts = pkts_43 + pkts_44 + pkts_1041
 WAIT_TIME=2
 SNIFF_TIMEOUT=5+WAIT_TIME
+logging.basicConfig(level=logging.DEBUG)
+
+TCP_PROTO=6
+UDP_PROTO=17
+
+tx_pkts = []
+fun_pkts = []
+rx_pkts = []
 
 @pytest.fixture
 def sniff_packets():
+    from scapy.all import sniff, sendp, Ether, IP, UDP, TCP, Raw
     sniffed_packets_veth1 = []
-    sniffed_packets_br_net = []
     sniffed_packets_veth2 = []
 
     sniff_complete_veth1_ev = threading.Event()
-    sniff_complete_br_net_ev = threading.Event()
     sniff_complete_veth2_ev = threading.Event()
 
-    pcap_filter = "host 11.1.1.1"
+    pcap_filter = "tcp port 179 or udp port 179 or udp port 2055 or udp port 2056 or tcp port 2055 or tcp port 2056"
 
     def sniffing(interface, sniffed_packets, pkts, event):
         sniff(iface=interface, filter=pcap_filter, count=len(pkts), prn=lambda x: sniffed_packets.append(x), timeout=SNIFF_TIMEOUT)
         event.set()
 
     # Start sniffing in a separate thread
-    sniff_thread1 = threading.Thread(target=sniffing, args=("veth1", sniffed_packets_veth1, all_pkts, sniff_complete_veth1_ev))
-    sniff_thread2 = threading.Thread(target=sniffing, args=("br_net", sniffed_packets_br_net, all_pkts, sniff_complete_br_net_ev))
-    sniff_thread3 = threading.Thread(target=sniffing, args=("veth2", sniffed_packets_veth2, all_pkts, sniff_complete_veth2_ev))
+    sniff_thread1 = threading.Thread(target=sniffing, args=("veth1", sniffed_packets_veth1, tx_pkts, sniff_complete_veth1_ev))
+    sniff_thread2 = threading.Thread(target=sniffing, args=("veth2", sniffed_packets_veth2, tx_pkts, sniff_complete_veth2_ev))
 
     sniff_thread1.start()
     sniff_thread2.start()
-    sniff_thread3.start()
 
-    yield sniffed_packets_veth1, sniffed_packets_br_net, sniffed_packets_veth2, sniff_complete_veth1_ev, sniff_complete_br_net_ev, sniff_complete_veth2_ev
+    yield sniffed_packets_veth1, sniffed_packets_veth2, sniff_complete_veth1_ev, sniff_complete_veth2_ev
 
     # Wait for sniffing to complete
     sniff_thread1.join()
     sniff_thread2.join()
-    sniff_thread3.join()
 
 def print_pkts(iface, pkts):
     print(f"[{iface}] Got")
     for p in pkts:
         print(p)
 
+def add_pkt(proto, fun_proto, payload_size, nat):
+    dip = "192.168.254.1" if not nat else "192.168.254.2"
+    rx_dip = "192.168.254.1" if not nat else "192.168.254.3"
+    rx_sip = "10.0.0.1" if not nat else "172.16.0.1"
+
+    #dport determines how the packet will be funneled
+    dport = 2055 if fun_proto == "tcp" else 2056
+    if proto == "udp":
+        l4 = UDP(sport=25000, dport=dport)
+        fun_sport = 540 #demux criteria on unfunneling
+    else:
+        l4 = TCP(sport=25000, dport=dport)
+        fun_sport = 541 #demux criteria on unfunneling
+    payload = Raw("X"*payload_size)
+
+    if fun_proto == "tcp":
+        seqnum = 0xCAFEBABE
+        ack = 0xBABECAFE
+        fun_hdr = TCP(seq=seqnum, ack=ack, flags='S', urgptr=0, sport=fun_sport, dport=179, window=1024)
+    else:
+        fun_hdr = UDP(sport=fun_sport, dport=179)
+
+    #Injected
+    tx_pkt = IP(src="10.0.0.1", dst=dip, ttl=64)/l4/payload
+    tx_pkts.append(tx_pkt)
+    #Funneled pkt
+    fun_pkts.append(IP(src=rx_sip, dst=rx_dip, ttl=64)/fun_hdr/Raw(tx_pkt[proto.upper()]))
+    #Unfunneled
+    rx_pkts.append(IP(src=rx_sip, dst=rx_dip, ttl=63)/l4/payload)
+
+def tx_pkts_ns(ns, pcap_file):
+    command = f"sudo ip netns exec {ns} sudo python3 -c \"from scapy.all import *; send(rdpcap('{pcap_file}'), iface='veth0')\""
+    try:
+        subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        print("Error sending packets:", e.stderr.decode())
+        exit(1)
+
 def test_unit_funnel_unfunnel(sniff_packets):
-    sniffed_packets_veth1, sniffed_packets_br_net, sniffed_packets_veth2, sniff_complete_veth1_ev, sniff_complete_br_net_ev, sniff_complete_veth2_ev = sniff_packets
+    #UDP funneled through TCP
+    add_pkt("udp", "tcp", 3, False)
+    add_pkt("udp", "tcp", 4, False)
+    add_pkt("udp", "tcp", 1001, False)
+    #UDP funneled through UDP
+    add_pkt("udp", "udp", 3, False)
+    add_pkt("udp", "udp", 4, False)
+    add_pkt("udp", "udp", 1001, False)
+
+    #TCP funneled through TCP
+    add_pkt("tcp", "tcp", 3, False)
+    add_pkt("tcp", "tcp", 4, False)
+    add_pkt("tcp", "tcp", 1001, False)
+
+    #TCP funneled through UDP
+    add_pkt("tcp", "udp", 3, False)
+    add_pkt("tcp", "udp", 4, False)
+    add_pkt("tcp", "udp", 1001, False)
+
+    wrpcap(".tx_pkts.pcap", tx_pkts)
+
+    sniffed_packets_veth1, sniffed_packets_veth2, sniff_complete_veth1_ev, sniff_complete_veth2_ev = sniff_packets
 
     print(f'Quick&dirty way to avoid race between this thread and sniffers...')
     time.sleep(WAIT_TIME)
 
-    sendp(all_pkts, iface="veth0")
+    #Send packets from ns1
+    tx_pkts_ns("ns1", ".tx_pkts.pcap")
 
     #Wait for sniffers to complete their job
     sniff_complete_veth1_ev.wait(SNIFF_TIMEOUT+1)
-    sniff_complete_br_net_ev.wait(SNIFF_TIMEOUT+1)
     sniff_complete_veth2_ev.wait(SNIFF_TIMEOUT+1)
+    print("veth1", sniffed_packets_veth1)
+    print("veth2", sniffed_packets_veth2)
 
-    print_pkts("veth1", sniffed_packets_veth1)
-    print_pkts("br_net", sniffed_packets_br_net)
-    print_pkts("veth2", sniffed_packets_veth2)
+    assert(len(sniffed_packets_veth1) == len(tx_pkts))
+    assert(len(sniffed_packets_veth2) == len(tx_pkts))
 
-    assert(len(sniffed_packets_veth1) == len(all_pkts))
-    assert(len(sniffed_packets_br_net) == len(all_pkts))
-    assert(len(sniffed_packets_veth2) == len(all_pkts))
+    for i in range(0, len(tx_pkts)):
+        tx = tx_pkts[i]
+        tx = tx.__class__(bytes(tx)) #Calculate checksums
+        fun = fun_pkts[i]
+        fun = fun.__class__(bytes(fun))
+        rx = rx_pkts[i]
+        rx = rx.__class__(bytes(rx))
 
-    for i in range(0, len(all_pkts)):
-        p = all_pkts[i]
-        p = p.__class__(bytes(p)) #Calculate checksums
+        sniffed_fun = sniffed_packets_veth1[i][IP]
+        sniffed_rx = sniffed_packets_veth2[i][IP]
 
-        p_ttl_dec = p.copy()
-        p_ttl_dec["IP"].ttl = p_ttl_dec["IP"].ttl -1
-        p_ttl_dec = p_ttl_dec.__class__(bytes(p)) #Calculate checksums
+        print(f"Injected pkt:\n")
+        tx.show()
 
-        p_veth1 = sniffed_packets_veth1[i]
-        p_br_net = sniffed_packets_br_net[i]
-        p_veth2 = sniffed_packets_veth2[i]
+        print(f"Expected Funneled pkt:\n")
+        fun.show()
+        print(f"Funneled pkt:\n")
+        sniffed_fun.show()
+        assert(fun == sniffed_fun)
 
-        #Before and after funneling need to preserve IP hdr, -TTL
-        assert p["IP"] == p_veth1["IP"]
-        assert p_ttl_dec["IP"] == p_veth2["IP"]
-
-        l4_proto = None
-        if "UDP" in p:
-            l4_proto = "UDP"
-        elif "TCP" in p:
-            l4_proto = "TCP"
-        else:
-            assert 0
-        #L4 hdr must be identic before&after funneling
-        assert p[l4_proto] == p_veth1[l4_proto]
-        assert p_ttl_dec[l4_proto] == p_veth2[l4_proto]
-
-        #Synthetically create the funneled pkt
-        aux = p.copy()
-        ip = IP(src=p["IP"].src, dst=p["IP"].dst, ttl=p["IP"].ttl)
-
-
-        sport = 540 if l4_proto == "UDP" else 541
-        tcp = TCP(dport=179, sport=sport, flags="S", urgptr=0, window=1024, seq=0xCAFEBABE, ack=0xBABECAFE)
-        funneled_p = Ether()/ip/tcp/aux[l4_proto]
-        funneled_p = funneled_p.__class__(bytes(funneled_p)) #Calculate checksums
-
-        assert p_br_net["IP"] == funneled_p["IP"]
-        assert p_br_net["TCP"] == funneled_p["TCP"]
+        print(f"Expected RX pkt:\n")
+        rx.show()
+        print(f"RX pkt:\n")
+        sniffed_rx.show()
+        assert(rx == sniffed_rx)
