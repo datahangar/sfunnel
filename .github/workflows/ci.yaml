@@ -17,10 +17,21 @@ jobs:
       fail-fast: false
       matrix:
         combination:
+          # Kernel 6.8, clang coverage (on runner)
           - { kernel: 'Linux 6.8', runner: 'ubuntu-24.04', clangs: 'clang-14 clang-15 clang-16 clang-17 clang-18' }
           - { kernel: 'Linux 6.8', runner: 'ubuntu-22.04', clangs: 'clang-11 clang-12 clang-13' }
+
+          # Kernel coverage
+          - { kernel: 'Linux 6.6', runner: 'ubuntu-24.04', clangs: 'clang-18' }
+
     runs-on: ${{ matrix.combination.runner }}
     steps:
+      #Kernel section
+      - name: "Launch QEMU VM"
+        if: matrix.combination.kernel != 'Linux 6.8'
+        run: |
+          echo "Spawning VM with Kernel '${{matrix.combination.kernel}}'..."
+
       - name: "Checkout sfunnel"
         uses: actions/checkout@v4
         with:
