@@ -1,6 +1,6 @@
 # sfunnel: multi-port/multi-flow session affinity in Kubernetes
 
-`sfunnel` is an [eBPF](https://ebpf.io/) tool designed to [_funnel_](docs/funneling)
+`sfunnel` is an [eBPF](https://ebpf.io/) tool designed to [_funnel_](docs/funneling.md)
 multiple traffic flows through a single [Kubernetes service](https://kubernetes.io/docs/concepts/services-networking/service/)
 _port_, ensuring - under [certain conditions](#requirements) - consistent
 `sessionAffinity: ClientIP` affinity across all _ports_ within the service.
