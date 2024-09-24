@@ -27,10 +27,67 @@ jobs:
     runs-on: ${{ matrix.combination.runner }}
     steps:
       #Kernel section
-      - name: "Launch QEMU VM"
+      - name: "Cleanup disk to maximize runner disk space"
+        if: matrix.combination.kernel != 'Linux 6.8'
+        uses: AdityaGarg8/remove-unwanted-software@v3 #easimon/maximize-build-space@v10
+        with:
+          remove-android: true
+          remove-dotnet: True
+          remove-haskell: true
+          remove-codeql: true
+          remove-docker-images: true
+
+      - name: "Launch QEMU VM (Kernel ${{matrix.combination.kernel}})"
         if: matrix.combination.kernel != 'Linux 6.8'
         run: |
           echo "Spawning VM with Kernel '${{matrix.combination.kernel}}'..."
+          echo "[apt] Install QEMU..."
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils cloud-utils openssh-client
+          echo "[image] Download image..."
+          wget https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img
+          qemu-img create -f qcow2 ubuntu-24.04.qcow2 20G
+          qemu-img convert -O qcow2 ubuntu-24.04-server-cloudimg-amd64.img image.qcow2
+          echo "[keys] Generate keys..."
+          ssh-keygen -t rsa -b 2048 -f /home/runner/.ssh/id_rsa -q -N ""
+          cat /home/runner/.ssh/id_rsa.pub > public_key.pub
+          echo "[cloud-init] Create cloud-init configuration..."
+          cat > cloud-init.cfg <<EOF
+          users:
+            - name: ubuntu
+              sudo: ALL=(ALL) NOPASSWD:ALL
+              ssh-authorized-keys:
+                - $(cat public_key.pub)
+              lock_passwd: true
+          EOF
+          echo "[cloud-init] Create disk..."
+          cloud-localds cloud-init.iso cloud-init.cfg
+          echo "[run] Start the VM..."
+            qemu-system-x86_64 \
+              -m 2048 \
+              -smp 2 \
+              -drive file=image.qcow2,format=qcow2 \
+              -cdrom cloud-init.iso \
+              -nographic \
+              -net user,hostfwd=tcp::2222-:22 \
+              -net nic &
+            # Wait for the VM to boot up
+            sleep 15
+          echo "[run] Check kernel is correct..."
+          count=1
+          while true; do
+            err=0
+            KERNEL=$(ssh -i /home/runner/.ssh/id_rsa -o StrictHostKeyChecking=no -p 2222 ubuntu@localhost "uname -a") || err=1
+            if [[ "$err" == "0" ]]; then
+              break;
+            elif [[ "${count}" == "5" ]]; then
+              echo "ERROR: VM did NOT boot!" && exit 1;
+            fi
+            ((count++))
+            sleep 10
+          done
+          echo "Running Kernel ${KERNEL}"
+          (echo ${KERNEL} | grep -i ${{matrix.combination.kernel}}) || (echo "ERROR: invalid Kernel. Expected '${{matrix.combination.kernel}}' got '${KERNEL}'"; exit 1)
 
       - name: "Checkout sfunnel"
         uses: actions/checkout@v4
