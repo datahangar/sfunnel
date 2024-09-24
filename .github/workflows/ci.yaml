@@ -13,7 +13,13 @@ permissions:
 
 jobs:
   make_check:
-    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        combination:
+          - { kernel: 'Linux 6.8', runner: 'ubuntu-24.04', clangs: 'clang-14 clang-15 clang-16 clang-17 clang-18' }
+          - { kernel: 'Linux 6.8', runner: 'ubuntu-22.04', clangs: 'clang-11 clang-12 clang-13' }
+    runs-on: ${{ matrix.combination.runner }}
     steps:
       - name: "Checkout sfunnel"
         uses: actions/checkout@v4
@@ -26,21 +32,31 @@ jobs:
         run: |
           sudo add-apt-repository universe
           sudo apt-get update
-          sudo apt-get install -y clang make iproute2 bridge-utils python3 \
-                                  python3-scapy python3-pip libbpf-dev \
+          sudo apt-get install -y ${{matrix.combination.clangs}} make iproute2 \
+                                  bridge-utils python3-scapy python3-pip libbpf-dev \
                                   libelf-dev linux-headers-generic \
                                   linux-libc-dev llvm iptables
-          sudo pip3 install pytest
           sudo ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/asm
-
+          if [[ "${{ matrix.combination.runner }}" == "ubuntu-24.04" ]]; then
+            sudo apt-get install python3-pytest
+          else
+            sudo pip3 install pytest #pytest binary missing in python3-pytest
+          fi
       - name: "Allow test traffic in iptables/nftables"
         run: |
           sudo iptables -L -n
           sudo iptables -t nat -L -n
           sudo iptables -I FORWARD -s 11.1.1.1 -j ACCEPT
 
-      - name: "Run tests..."
-        run: cd sfunnel/test && make VERBOSE=1
+      - name: "Run tests on '${{matrix.combination.clangs}}'..."
+        run: |
+          cd sfunnel/test
+          for clang in ${{matrix.combination.clangs}}; do
+            echo "[${clang}] Running tests ..."
+            make VERBOSE=1 CLANG=${clang} || ( echo "FAILED: test failed with '${clang}'" && exit 1 )
+            make clean 2>&1 > /dev/null
+            echo "[${clang}]"
+          done
 
   docker_build_test_publish:
     needs: [make_check]

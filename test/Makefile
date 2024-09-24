@@ -1,10 +1,13 @@
 .PHONY: check run_checks setup load unload compile show clean
 
+SHELL=/bin/bash
+
 ifeq ($(VERBOSE),1)
     QUIET :=
 else
     QUIET := @
 endif
+CLANG ?= clang
 
 all: check
 
@@ -47,7 +50,7 @@ unload:
 compile:
 	$(QUIET)rm ../src/ruleset.h || true
 	$(QUIET)python3 ../tools/gen.py ruleset > ruleset.h
-	$(QUIET)clang -DTEST_TCP_FUNNELING=1 -O2 -Wall -Werror -I./ -g -target bpf -c ../src/sfunnel.c -o tc_sfunnel.o
+	$(CLANG) -DTEST_TCP_FUNNELING=1 -O2 -Wall -Werror -I./ -g -target bpf -c ../src/sfunnel.c -o tc_sfunnel.o
 
 show:
 	$(QUIET)sudo tc filter show dev veth0 ingress
