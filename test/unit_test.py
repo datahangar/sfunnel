@@ -1,4 +1,5 @@
 import pytest
+import time
 from scapy.all import sniff, sendp, Ether, IP, UDP, TCP, Raw
 import threading
 
@@ -33,7 +34,8 @@ pkts_1041 = [
 ]
 
 all_pkts = pkts_43 + pkts_44 + pkts_1041
-SNIFF_TIMEOUT=3
+WAIT_TIME=2
+SNIFF_TIMEOUT=5+WAIT_TIME
 
 @pytest.fixture
 def sniff_packets():
@@ -74,6 +76,9 @@ def print_pkts(iface, pkts):
 
 def test_unit_funnel_unfunnel(sniff_packets):
     sniffed_packets_veth1, sniffed_packets_br_net, sniffed_packets_veth2, sniff_complete_veth1_ev, sniff_complete_br_net_ev, sniff_complete_veth2_ev = sniff_packets
+
+    print(f'Quick&dirty way to avoid race between this thread and sniffers...')
+    time.sleep(WAIT_TIME)
 
     sendp(all_pkts, iface="veth0")
 
