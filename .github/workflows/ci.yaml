@@ -70,7 +70,7 @@ jobs:
               -cdrom cloud-init.iso \
               -nographic \
               -net user,hostfwd=tcp::2222-:22 \
-              -net nic &
+              -net nic &2>1 > vm.log &
             # Wait for the VM to boot up
             sleep 15
           echo "[run] Check kernel is correct..."
