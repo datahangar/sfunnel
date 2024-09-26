@@ -18,11 +18,9 @@ jobs:
       matrix:
         combination:
           #Debug
-          - { kernel: 'Linux 6.8', runner: 'ubuntu-22.04', clangs: 'clang-11 clang-12 clang-13', debug: '1' }
           - { kernel: 'Linux 6.8', runner: 'ubuntu-24.04', clangs: 'clang-14 clang-15 clang-16 clang-17 clang-18', debug: '1' }
 
           #NDEBUG
-          - { kernel: 'Linux 6.8', runner: 'ubuntu-22.04', clangs: 'clang-11 clang-12 clang-13', debug: '0' }
           - { kernel: 'Linux 6.8', runner: 'ubuntu-24.04', clangs: 'clang-14 clang-15 clang-16 clang-17 clang-18', debug: '0' }
     runs-on: ${{ matrix.combination.runner }}
     steps:
