@@ -51,10 +51,10 @@ int ip4_funnel(struct __sk_buff* skb, __u8* eth, struct iphdr* ip, void* l4,
 		return TC_ACT_SHOT;
 	}
 
-	PRINTK("[%p] Funneling proto:%d packet thru proto: %d of size: %d", skb,
+	PRINTK("[%p] Size: %d", skb, skb->len);
+	PRINTK("[%p] Funneling proto:%d packet thru proto: %d", skb,
 							old_l4_proto,
-							funn_proto,
-							skb->len);
+							funn_proto);
 	//Change IP PROTO
 	union ttl_proto old_ttl = *(union ttl_proto*)&ip->ttl;
 	ip->protocol = funn_proto;
@@ -176,9 +176,9 @@ int ip4_unfunnel(struct __sk_buff* skb, struct iphdr* ip, void* l4,
 		return TC_ACT_SHOT;
 	}
 
-	PRINTK("[%p] Unfunneling funneling proto:%d packet, original L4 proto: %d of size: %d", skb,
-							ip->protocol, proto,
-							skb->len);
+	PRINTK("[%p] Size: %d", skb, skb->len);
+	PRINTK("[%p] Unfunneling funneling proto:%d packet, original L4 proto: %d", skb,
+							ip->protocol, proto);
 
 	//Substract funneling HDR and recalc check
 	union ttl_proto old_ttl = *(union ttl_proto*)&ip->ttl;
