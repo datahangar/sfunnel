@@ -86,7 +86,10 @@ setup:
 	$(QUIET)sudo sysctl net.ipv4.conf.veth1.rp_filter=0
 	$(QUIET)sudo sysctl net.ipv4.conf.veth2.rp_filter=0
 	$(QUIET)sudo ip netns exec ns2 sysctl net.ipv4.conf.veth3.rp_filter=0
-
+	$(QUIET)sudo ip netns exec ns1 ethtool --offload veth0 rx off tx off
+	$(QUIET)sudo ethtool --offload veth1 rx off tx off
+	$(QUIET)sudo ethtool --offload veth2 rx off tx off
+	$(QUIET)sudo ip netns exec ns2 ethtool --offload veth3 rx off tx off
 load:
 	$(QUIET)sudo ip netns exec ns1 tc filter add dev veth0 egress bpf da obj ./tc_sfunnel.o sec funnel verbose
 	$(QUIET)sudo tc filter add dev veth1 ingress bpf da obj ./tc_sfunnel.o sec funnel verbose
