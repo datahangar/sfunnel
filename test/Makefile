@@ -2,6 +2,12 @@
 
 SHELL=/bin/bash
 
+ifeq ($(DEBUG),1)
+    DEBUG := 1
+else
+    DEBUG := 0
+endif
+
 ifeq ($(VERBOSE),1)
     QUIET :=
 else
@@ -92,7 +98,7 @@ unload:
 compile:
 	$(QUIET)rm ../src/ruleset.h || true
 	$(QUIET)python3 ../tools/gen.py ruleset > ruleset.h
-	$(CLANG) -DDEBUG=1 -DTEST_TCP_FUNNELING=1 -O2 -Wall -Werror -I./ -g -target bpf -c ../src/sfunnel.c -o tc_sfunnel.o
+	$(CLANG) -DDEBUG=$(DEBUG) -DTEST_TCP_FUNNELING=1 -O2 -Wall -Werror -I./ -g -target bpf -c ../src/sfunnel.c -o tc_sfunnel.o
 
 clean: unload
 	$(QUIET)rm -rf *.o || true

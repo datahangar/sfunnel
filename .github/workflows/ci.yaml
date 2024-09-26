@@ -17,8 +17,13 @@ jobs:
       fail-fast: false
       matrix:
         combination:
-          - { kernel: 'Linux 6.8', runner: 'ubuntu-24.04', clangs: 'clang-14 clang-15 clang-16 clang-17 clang-18' }
-          - { kernel: 'Linux 6.8', runner: 'ubuntu-22.04', clangs: 'clang-11 clang-12 clang-13' }
+          #Debug
+          - { kernel: 'Linux 6.8', runner: 'ubuntu-22.04', clangs: 'clang-11 clang-12 clang-13', debug: '1' }
+          - { kernel: 'Linux 6.8', runner: 'ubuntu-24.04', clangs: 'clang-14 clang-15 clang-16 clang-17 clang-18', debug: '1' }
+
+          #NDEBUG
+          - { kernel: 'Linux 6.8', runner: 'ubuntu-22.04', clangs: 'clang-11 clang-12 clang-13', debug: '0' }
+          - { kernel: 'Linux 6.8', runner: 'ubuntu-24.04', clangs: 'clang-14 clang-15 clang-16 clang-17 clang-18', debug: '0' }
     runs-on: ${{ matrix.combination.runner }}
     steps:
       - name: "Checkout sfunnel"
@@ -53,7 +58,7 @@ jobs:
           cd sfunnel/test
           for clang in ${{matrix.combination.clangs}}; do
             echo "[${clang}] Running tests ..."
-            make VERBOSE=1 CLANG=${clang} || ( echo "FAILED: test failed with '${clang}'" && exit 1 )
+            make VERBOSE=1 CLANG=${clang} DEBUG=${{matrix.combination.debug}} || ( echo "FAILED: test failed with '${clang}' debug='${{matrix.combination.debug}}'" && exit 1 )
             make clean 2>&1 > /dev/null
             echo "[${clang}]"
           done
