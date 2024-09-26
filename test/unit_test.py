@@ -89,24 +89,16 @@ def tx_pkts_ns(ns, pcap_file):
         exit(1)
 
 def test_unit_funnel_unfunnel(sniff_packets):
-    #UDP funneled through TCP
-    add_pkt("udp", "tcp", 3, False)
-    add_pkt("udp", "tcp", 4, False)
-    add_pkt("udp", "tcp", 1001, False)
-    #UDP funneled through UDP
-    add_pkt("udp", "udp", 3, False)
-    add_pkt("udp", "udp", 4, False)
-    add_pkt("udp", "udp", 1001, False)
-
-    #TCP funneled through TCP
-    add_pkt("tcp", "tcp", 3, False)
-    add_pkt("tcp", "tcp", 4, False)
-    add_pkt("tcp", "tcp", 1001, False)
-
-    #TCP funneled through UDP
-    add_pkt("tcp", "udp", 3, False)
-    add_pkt("tcp", "udp", 4, False)
-    add_pkt("tcp", "udp", 1001, False)
+    for nat in [False]:
+        for size in [3, 4, 1001]:
+            #UDP funneled through TCP
+            add_pkt("udp", "tcp", size, nat)
+            #UDP funneled through UDP
+            add_pkt("udp", "udp", size, nat)
+            #TCP funneled through TCP
+            add_pkt("tcp", "tcp", size, nat)
+            #TCP funneled through UDP
+            add_pkt("tcp", "udp", size, nat)
 
     wrpcap(".tx_pkts.pcap", tx_pkts)
 
