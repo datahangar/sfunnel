@@ -128,7 +128,7 @@ environments, please reach out so that we can update this list.
 * [Rule syntax](docs/rules.md)
 * [sfunnel container](docs/container.md)
 * [Deploying it in K8s](docs/k8s.md)
-* [Next steps](docs/next_steps.md)
+* [Next steps](../../issues?q=is%3Aissue+is%3Aopen+label%3Afeature)
 
 Contact
 -------
