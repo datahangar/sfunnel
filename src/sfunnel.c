@@ -23,17 +23,23 @@ int ip4_funnel(struct __sk_buff* skb, __u8* eth, struct iphdr* ip, void* l4,
 	struct udphdr *old_udp, *udp = NULL;
 
 	__u8 old_l4_proto = ip->protocol;
-	__u32 old_tot_len = bpf_ntohs(ip->tot_len) ;
+	__u32 old_tot_len = bpf_ntohs(ip->tot_len);
 	__u32 l3_off  = (__u8*)ip - eth;
 	__u32 fhdr_size;
+	__u32 l4_csum_off;
+	__be32 old_csum, new_csum;
 
 	//L4 header to funnel
 	if(old_l4_proto == IPPROTO_UDP){
 		old_udp = (struct udphdr*)l4;
 		CHECK_SKB_PTR(skb, old_udp+1);
+		l4_csum_off  = (__u8*)l4 - eth + offsetof(struct udphdr, check);
+		old_csum = old_udp->check;
 	}else if(old_l4_proto == IPPROTO_TCP){
 		old_tcp = (struct tcphdr*)l4;
 		CHECK_SKB_PTR(skb, old_tcp+1);
+		l4_csum_off  = (__u8*)l4 - eth + offsetof(struct tcphdr, check);
+		old_csum = old_tcp->check;
 	}else{
 		PRINTK("ERROR: IP funneled proto %d not supported!",
 							old_l4_proto);
@@ -55,11 +61,37 @@ int ip4_funnel(struct __sk_buff* skb, __u8* eth, struct iphdr* ip, void* l4,
 	PRINTK("[%p] Funneling proto:%d packet thru proto: %d", skb,
 							old_l4_proto,
 							funn_proto);
+	//Packet will likely traverse NATs. Set sip/dip for L4 csum
+	//(pseudoheader) calculation to a known value 0x0
+	__s64 diff = bpf_csum_diff((__be32*)&ip->saddr, 4, NULL, 0, 0);
+	diff = bpf_csum_diff((__be32*)&ip->daddr, 4, NULL, 0, diff);
+
+	int rc = bpf_l4_csum_replace(skb, l4_csum_off, 0, diff, 0);
+	if(rc < 0){
+		PRINTK("ERROR l4_csum_replace: %d", rc);
+		return TC_ACT_SHOT;
+	}
+
+	//Reeval ptrs common
+	eth = (__u8*)SKB_GET_ETH(skb);
+	ip = (struct iphdr*)(eth+sizeof(struct ethhdr));
+	CHECK_SKB_PTR(skb, ip+1);
+
+	//Recover new_csum
+	if(old_l4_proto == IPPROTO_UDP){
+		old_udp = (struct udphdr *)((__u8*)ip + (ip->ihl * 4));
+		CHECK_SKB_PTR(skb, old_udp+1);
+		new_csum = old_udp->check;
+	}else if(old_l4_proto == IPPROTO_TCP){
+		old_tcp = (struct tcphdr *) ((__u8*)ip + (ip->ihl * 4));
+		CHECK_SKB_PTR(skb, old_tcp+1);
+		new_csum = old_tcp->check;
+	}
+
 	//Change IP PROTO
 	union ttl_proto old_ttl = *(union ttl_proto*)&ip->ttl;
 	ip->protocol = funn_proto;
-	__s64 diff = bpf_csum_diff((__be32*)&old_ttl, 4, (__be32*)&ip->ttl, 4,
-							0);
+	diff = bpf_csum_diff((__be32*)&old_ttl, 4, (__be32*)&ip->ttl, 4, 0);
 
 	//Increase tot_len with new L4 hdr
 	struct ver_ihl_tos_totlen old_totlen = *(struct ver_ihl_tos_totlen*)ip;
@@ -67,7 +99,7 @@ int ip4_funnel(struct __sk_buff* skb, __u8* eth, struct iphdr* ip, void* l4,
 	diff = bpf_csum_diff((__be32*)&old_totlen, 4, (__be32*)ip, 4, diff);
 
 	//Adjust IP checksum and make room for the new L4 hdr
-	int rc = bpf_l3_csum_replace(skb, l3_off + offsetof(struct iphdr, check),
+	rc = bpf_l3_csum_replace(skb, l3_off + offsetof(struct iphdr, check),
 							0,
 							diff, 0);
 	if(rc < 0){
@@ -106,6 +138,12 @@ int ip4_funnel(struct __sk_buff* skb, __u8* eth, struct iphdr* ip, void* l4,
 		__be16 tcp_csum[2] = {old_tcp->check, 0};
 		diff = bpf_csum_diff(0, 0, (__be32*)&tcp_csum, 4, diff);
 	}
+
+	//Apply diff due to 0ing sip/dip for csum in payload L4
+	//TODO: Look into merging this csum_diff with the previous; in principle
+	//it should be sufficient to diff 0 (original L4 checksum bytes) =>
+	//new_csum, but doesn't seem to work...
+	diff = bpf_csum_diff(&old_csum, 4, &new_csum, 4, diff);
 
 	//Pseudoheader diff
 	struct pseudo_header old, new;
@@ -160,10 +198,10 @@ int ip4_funnel(struct __sk_buff* skb, __u8* eth, struct iphdr* ip, void* l4,
 }
 
 static __always_inline
-int ip4_unfunnel(struct __sk_buff* skb, struct iphdr* ip, void* l4,
-							const __u8 proto){
+int ip4_unfunnel(struct __sk_buff* skb, struct iphdr* ip, const __u8 proto){
 
 	__u32 fhdr_size;
+	__u32 l4_csum_off;
 
 	//L4 funneling header
 	if(ip->protocol == IPPROTO_UDP){
@@ -211,6 +249,34 @@ int ip4_unfunnel(struct __sk_buff* skb, struct iphdr* ip, void* l4,
 	rc = bpf_skb_adjust_room(skb, -(__s32)fhdr_size, BPF_ADJ_ROOM_NET, 0);
 	if(rc < 0){
 		PRINTK("ERROR adjust room: %d", rc);
+		return TC_ACT_SHOT;
+	}
+
+	//Reeval ptrs
+	__u8* eth = (__u8*)SKB_GET_ETH(skb);
+	ip = (struct iphdr*) (eth + sizeof(struct ethhdr));
+	CHECK_SKB_PTR(skb, ip+1);
+	__u8* l4 = ((__u8*)ip + (ip->ihl * 4));
+
+	//Adjust L4 checksum (NAT)
+	if(proto == IPPROTO_UDP){
+		CHECK_SKB_PTR(skb, l4+sizeof(struct udphdr));
+		l4_csum_off  = (__u8*)l4 - eth + offsetof(struct udphdr, check);
+	}else if(proto == IPPROTO_TCP){
+		CHECK_SKB_PTR(skb, l4+sizeof(struct tcphdr));
+		l4_csum_off  = (__u8*)l4 - eth + offsetof(struct tcphdr, check);
+	}else{
+		PRINTK("ERROR: IP funneled proto %d not supported!",
+							proto);
+		return TC_ACT_SHOT;
+	}
+
+	diff = bpf_csum_diff(NULL, 0, (__be32*)&ip->saddr, 4, 0);
+	diff = bpf_csum_diff(NULL, 0, (__be32*)&ip->daddr, 4, diff);
+
+	rc = bpf_l4_csum_replace(skb, l4_csum_off, 0, diff, 0);
+	if(rc < 0){
+		PRINTK("ERROR l4_csum_replace: %d", rc);
 		return TC_ACT_SHOT;
 	}
 
@@ -266,7 +332,7 @@ static inline int proc_ip4(struct __sk_buff* skb, __u8* eth, struct iphdr* ip){
 						funn_p->dport);
 	}else if(rule->actions.unfunnel.execute){
 		__be16 proto = rule->actions.unfunnel.p.unfunnel.proto;
-		return ip4_unfunnel(skb, ip, l4, proto);
+		return ip4_unfunnel(skb, ip, proto);
 	}
 
 	//DNAT

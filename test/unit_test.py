@@ -72,12 +72,21 @@ def add_pkt(proto, fun_proto, payload_size, nat):
     else:
         fun_hdr = UDP(sport=fun_sport, dport=179)
 
-    #Injected
+    ## Injected
     tx_pkt = IP(src="10.0.0.1", dst=dip, ttl=64)/l4/payload
     tx_pkts.append(tx_pkt)
-    #Funneled pkt
-    fun_pkts.append(IP(src=rx_sip, dst=rx_dip, ttl=64)/fun_hdr/Raw(tx_pkt[proto.upper()]))
-    #Unfunneled
+
+    ## Funneled pkt
+    #We have to adjust L4 csum (payload after funneling) for csum calculation
+    #with saddr=daddr=0x0
+    aux = tx_pkt.copy()
+    aux["IP"].src = aux["IP"].dst = "0.0.0.0"
+    aux = aux.__class__(bytes(aux)) #calc l4 csum to pass it as payload
+
+    #Note: we are capturing on veth1 using PF_PACKET, so pre PREROUTING and
+    fun_pkts.append(IP(src="10.0.0.1", dst=dip, ttl=64)/fun_hdr/Raw(aux[proto.upper()]))
+
+    ## Unfunneled
     rx_pkts.append(IP(src=rx_sip, dst=rx_dip, ttl=63)/l4/payload)
 
 def tx_pkts_ns(ns, pcap_file):
@@ -89,7 +98,7 @@ def tx_pkts_ns(ns, pcap_file):
         exit(1)
 
 def test_unit_funnel_unfunnel(sniff_packets):
-    for nat in [False]:
+    for nat in [False, True]:
         for size in [3, 4, 1001]:
             #UDP funneled through TCP
             add_pkt("udp", "tcp", size, nat)

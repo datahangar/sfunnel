@@ -129,12 +129,19 @@ The original prototype can be found [here](https://github.com/datahangar/sfunnel
 [funnel.c](https://github.com/datahangar/sfunnel/blob/984813f57ea3248c8c64192663b3ab4aed84bb46/src/funnel.c) and
 [unfunnel.c](https://github.com/datahangar/sfunnel/blob/984813f57ea3248c8c64192663b3ab4aed84bb46/src/unfunnel.c).
 
-The code is fairly simple, and doesn't require much explanation. Perhaps the
-only interesting bit is that L3 and L4 checksum calculations use [`bpf_csum_diff()`](https://ebpf-docs.dylanreimerink.nl/linux/helper-function/bpf_csum_diff/)
+The code is fairly simple, and doesn't require much explanation. The only
+interesting bits have to do with the L3 and L4 checksum calculations, which use [`bpf_csum_diff()`](https://ebpf-docs.dylanreimerink.nl/linux/helper-function/bpf_csum_diff/)
 to reuse the original [IP](https://github.com/datahangar/sfunnel/blob/984813f57ea3248c8c64192663b3ab4aed84bb46/src/funnel.c#L38)
 and [UDP checksum](https://github.com/datahangar/sfunnel/blob/984813f57ea3248c8c64192663b3ab4aed84bb46/src/funnel.c#L75)
-saving some processing cycles. Unfunneling doesn't require L4
-checksum recalculation.
+saving some processing cycles.
+
+_Note: this was added later on, and was not part of the original prototype_
+
+At the same time, and in order to properly traverse NATs, during funneling the
+original L4 checksum is adjusted with `src_ip` and `dst_ip` set to a known value
+(`0x0`). This allows the unfunneling to readjust the checksum based on the diff
+between `0x0` and the acutal IP addresses of the packet then, without the need
+to pass extra state within the packet.
 
 #### Using an init container
 
