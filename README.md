@@ -65,7 +65,7 @@ container along with the [rules](docs/rules.md) in `SFUNNEL_RULESET`:
 +          env:
 +            - name: SFUNNEL_RULESET
 +              value: ip tcp dport 80 sport 540 actions unfunnel tcp
-+          image: ghcr.io/datahangar/sfunnel:0.0.6@sha256:be12287922d9b26ad3a77403957a6b1c4093a1e97dec44e0d2d3308a91596c03
++          image: ghcr.io/datahangar/sfunnel:0.0.8@sha256:53c6ad27e82903b853876b5dbcc6f612f0d94ec61f78ec4759865f5e2b50de12
 +          securityContext:
 +            privileged: false
 +            capabilities:
