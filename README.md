@@ -1,11 +1,14 @@
 # sfunnel: multi-port/multi-flow session affinity in Kubernetes
 
-`sfunnel` is an [eBPF](https://ebpf.io/) tool designed to [_funnel_](docs/funneling.md)
-multiple traffic flows through a single [Kubernetes service](https://kubernetes.io/docs/concepts/services-networking/service/)
-_port_, ensuring - under [certain conditions](#requirements) - consistent
-`sessionAffinity: ClientIP` affinity across all _ports_ within the service.
+`sfunnel` is an [eBPF](https://ebpf.io/) program designed to [funnel](docs/funneling.md)
+multiple traffic flows through a single Kubernetes service _port_, ensuring
+[under certain conditions](#requirements) consistent `sessionAffinity: ClientIP`
+affinity across all _ports_ within the service.
 
 See the original use-case [here](docs/use-cases/network-telemetry-nfacctd.md).
+
+:warning: While `sfunnel` should be fully functional, and has been [validated](#tested-environments),
+it is still in an early development stage.
 
 ## At a glance
 
@@ -93,24 +96,30 @@ docker run --network="host" --privileged -e SFUNNEL_RULESET="$SFUNNEL_RULESET" s
 
 The `sfunnel` container will run, load the eBPF code and finish its execution.
 
-##### More use-cases
+## Tested environments
 
-This is a simple example yet not very useful example. See [use-cases](docs/use-cases/)
-for real world examples.
+* **Google Kubernetes Engine(GKE)**: Standard cluster.
+   - Autopilot clusters are _not supported_ due to lack of eBPF support.
+* **MetalLB** with the following CNI plugins:
+  * Cilium
+  * Flannel
+  * Calico
+* **Dockerd**
+
+`sfunnel` should work on any environments supporting `sessionAffinity: ClientIP`.
+If you encounter any issues or have successfully deployed it in other
+environments, please reach out so that we can update this list.
 
 ## Requirements
 
+* [eBPF](https://ebpf.io/)-enabled kernel, with support for `clsact` and `direct-action`.
+* Proper [MTU configuration](docs/funneling.md#mtu) (20 bytes for TCP, 8 for UDP).
 * In Kubernetes:
   * Privileged init container (`CAP_BPF`, `CAP_NET_ADMIN`, `CAP_SYS_ADMIN`)
-  * [eBPF](https://ebpf.io/)-enabled kernel, with support for `clsact` and `direct-action`.
-  * Proper [MTU configuration](docs/funneling.md#mtu) (20 bytes for TCP, 8 for UDP).
+    * In some cloud providers (E.g. Google Cloud) `privileged=true` is required.
 * On the funneling side:
   * Permissions to spawn `sfunnel` (same caps as before).
   * Route or proxy traffic to be funneled. More on this [here](docs/funneling.md)
-  * Proper [MTU configuration](docs/funneling.md#mtu) (20 bytes for TCP, 8 for UDP).
-
-Make sure stateful firewalls and IDS/IDPS are properly configured to allow this
-type of traffic.
 
 ## More...
 
