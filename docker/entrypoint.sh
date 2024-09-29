@@ -105,39 +105,30 @@ if [[ "${DEBUG}" == "1" ]]; then
 	set -x
 fi
 
-#If SFUNNEL_RULESET is defined, create the file
-if [[ "${SFUNNEL_RULESET}" != "" ]]; then
-	echo "[INFO] SFUNNEL_RULESET='${SFUNNEL_RULESET}'"
-	echo ${SFUNNEL_RULESET} > /opt/sfunnel/src/ruleset
-fi
-
-#Log the ruleset that will be used
-if [[ -f /opt/sfunnel/src/ruleset ]]; then
-	echo "[INFO] Using a custom ruleset..."
-	echo "==="
-	cat /opt/sfunnel/src/ruleset
-	echo "==="
-else
-	echo "[INFO] Using the default ruleset..."
-	echo "==="
-	cat /opt/sfunnel/src/ruleset.default
-	echo "==="
-	cp /opt/sfunnel/src/ruleset.default /opt/sfunnel/src/ruleset
-fi
-
-#Compile sfunnel only if new ruleset or DEBUG=1
-if [[ "${DEBUG}" == "1" ]] || [[ -f /opt/sfunnel/src/ruleset ]]; then
-	echo "[INFO] Recompiling sfunnel BPF program..."
-	compile
-fi
-
-echo ""
-
 if [[ "${CLEAN}" == "1" ]]; then
 	OP=clean_prog
 	OP_STR=clean
 	echo -e "[INFO] Cleaning ALL BPF programs on IFACES={$IFACES} DIRECTION=${DIRECTION} using clsact qdisc...\n"
 else
+	#Check that a ruleset has been defined
+	if [[ "${SFUNNEL_RULESET}" == "" && ! -f /etc/sfunnel/ruleset ]]; then
+		echo "[ERROR] Neither '\$SFUNNEL_RULSET' is defined nor '/opt/sfunnel/ruleset' present. Aborting..."
+		exit 1
+	fi
+
+	#If SFUNNEL_RULESET is defined, create/overwrite the file
+	if [[ "${SFUNNEL_RULESET}" != "" ]]; then
+		echo "[INFO] SFUNNEL_RULESET='${SFUNNEL_RULESET}'"
+		echo ${SFUNNEL_RULESET} > /etc/sfunnel/ruleset
+	fi
+
+	#Compile sfunnel with the ruleset
+	echo "[INFO] Recompiling sfunnel BPF program with ruleset:"
+	echo "==="
+	cat /etc/sfunnel/ruleset
+	echo "==="
+	compile
+
 	OP=load_prog
 	OP_STR=attach
 	echo -e "[INFO] Attaching BPF program '${PROG}' on IFACES={$IFACES} DIRECTION=${DIRECTION} using clsact qdisc...\n"

@@ -8,8 +8,8 @@ in the host namespace `docker --network="host"`).
 
 When the container starts, it performs the following actions:
 
-1. Recompiles the BPF program if a custom ruleset is provided or `DEBUG`
-   mode is enabled. The ruleset is static at compile-time, so no [BPF maps](https://docs.kernel.org/bpf/maps.html)
+1. Recompiles the BPF program with the ruleset provided. The ruleset is static
+   at compile-time, so no [BPF maps](https://docs.kernel.org/bpf/maps.html)
    are needed. Mind the [ruleset limitations](rules.md#scalability).
 1. For each interface specified in `$IFACES`, the container will:
   * create a `clasct` qdisc
@@ -20,7 +20,7 @@ When the container starts, it performs the following actions:
 Several environment variables can be used to control the behaviour of the `sfunnel`
 container:
 
-* `$SFUNNEL_RULESET`: the list of rules. This variable takes precedence over `/opt/sfunnel/src/ruleset`.
+* `$SFUNNEL_RULESET`: the list of rules. This variable takes precedence over `/etc/sfunnel/ruleset`.
 * `$IFACES`: interfaces to load the BPF program to. Default: "" (all).
 * `DIRECTION`: specifies the direction {`ingress`, `egress`, `both`} for attaching the BPF program.
    For most use-cases, ingress is sufficient. Default: "ingress".
@@ -36,8 +36,7 @@ container:
 * `$N_ATTEMPTS`: number of attempts to load the BPF program on an interface. Default is 6.
 * `$RETRY_DELAY`: delay between retry attemps. Default is 3.
 
-## Loading Ruleset via file
+## Loading Ruleset via file `/etc/sfunnel/ruleset`
 
-The ruleset can be loaded via configmapi (K8s) or a docker volume by creating the
-`ruleset` file in the `/opt/sfunnel/src` directory. This file takes precedence
-over `/opt/sfunnel/src/ruleset.defaults`.
+The ruleset can be loaded via configmap (K8s) or a docker volume by creating
+the file `/etc/sfunnel/ruleset`.

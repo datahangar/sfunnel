@@ -92,53 +92,51 @@ jobs:
 
           docker buildx build --platform ${PLATFORMS} -t sfunnel --build-arg VERSION="$(git describe)" --build-arg COMMIT="${GITHUB_SHA}" --load -f docker/Dockerfile .
 
-      - name: "[TEST] Run container with default ruleset..."
+      - name: "[TEST] Run container without env. nor file. Should fail..."
         run: |
           set -o pipefail
-          docker run --privileged sfunnel:latest 2>&1 | tee output
-          if [ ${PIPESTATUS[0]} -ne 0 ]; then
-            echo "ERROR: container execution FAILED!"
+          set +e
+          docker run --privileged --network=host -v /var/run/netns:/var/run/netns -e NETNS=test_ns_invalid -e DEBUG=1 -e IFACES=lo sfunnel:latest 2>&1 | tee output
+          if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            echo "ERROR: container succeded when it should have FAILED!"
             exit 1
           fi
+          set -e
 
-          grep "Using the default ruleset" output || (echo "ERROR: unable to validate it loads default ruleset" && exit 1)
-
-      - name: "[TEST] Run container with custom ruleset file..."
+      - name: "[TEST] Run container with ruleset file..."
         run: |
           RULE="ip saddr 127.0.0.1 udp dport 80 actions unfunnel udp"
           echo "$RULE" > ruleset
 
           set -o pipefail
-          docker run --privileged -v `pwd`/ruleset:/opt/sfunnel/src/ruleset 2>&1 sfunnel:latest | tee output
+          docker run --privileged -v `pwd`/ruleset:/etc/sfunnel/ruleset 2>&1 sfunnel:latest | tee output
           if [ ${PIPESTATUS[0]} -ne 0 ]; then
             echo "ERROR: container execution FAILED!"
             exit 1
           fi
 
-          grep "Using a custom ruleset" output || (echo "ERROR: unable to validate it loads custom file ruleset" && exit 1)
-          grep "Recompiling sfunnel BPF program" output || (echo "ERROR: unable to validate it loads custom file ruleset" && exit 1)
-          grep "$RULE" output || (echo "ERROR: unable to validate it loads custom file ruleset" && exit 1)
+          grep "Recompiling sfunnel BPF program" output || (echo "ERROR: unable to validate it loads the rulset file" && exit 1)
+          grep "$RULE" output || (echo "ERROR: unable to validate it loads the ruleset file" && exit 1)
 
-      - name: "[TEST] Run container with custom ruleset via SFUNNEL_RULESET..."
+      - name: "[TEST] Run container with ruleset via SFUNNEL_RULESET..."
         run: |
           RULE="ip saddr 127.0.0.2 udp dport 80 actions unfunnel udp" #Should override ruleset file with 127.0.0.1
 
           set -o pipefail
-          docker run -e SFUNNEL_RULESET="$RULE" --privileged -v `pwd`/ruleset:/opt/sfunnel/src/ruleset sfunnel:latest 2>&1 | tee output
+          docker run -e SFUNNEL_RULESET="$RULE" --privileged -v `pwd`/ruleset:/etc/sfunnel/ruleset sfunnel:latest 2>&1 | tee output
           if [ ${PIPESTATUS[0]} -ne 0 ]; then
             echo "ERROR: container execution FAILED!"
             exit 1
           fi
 
-          grep "SFUNNEL_RULESET='$RULE'" output || (echo "ERROR: unable to validate it loads custom ruleset via SFUNNEL_RULESET" && exit 1)
-          grep "Using a custom ruleset" output || (echo "ERROR: unable to validate it loads custom ruleset via SFUNNEL_RULESET" && exit 1)
-          grep "Recompiling sfunnel BPF program" output || (echo "ERROR: unable to validate it loads custom ruleset via SFUNNEL_RULESET" && exit 1)
+          grep "SFUNNEL_RULESET='$RULE'" output || (echo "ERROR: unable to validate it loads ruleset via SFUNNEL_RULESET" && exit 1)
+          grep "Recompiling sfunnel BPF program" output || (echo "ERROR: unable to validate it loads ruleset via SFUNNEL_RULESET" && exit 1)
           grep "$RULE" output || (echo "ERROR: unable to validate it loads custom ruleset via SFUNNEL_RULESET" && exit 1)
 
       - name: "[TEST] Run container with custom params ..."
         run: |
           set -o pipefail
-          docker run -e N_ATTEMPTS=7 -e RETRY_DELAY=3 -e IFACES="lo" -e DEBUG=1 --privileged sfunnel:latest 2>&1 | tee output
+          docker run -e N_ATTEMPTS=7 -e RETRY_DELAY=3 -e IFACES="lo" -e DEBUG=1 -v `pwd`/ruleset:/etc/sfunnel/ruleset --privileged sfunnel:latest 2>&1 | tee output
           if [ ${PIPESTATUS[0]} -ne 0 ]; then
             echo "ERROR: container execution FAILED!"
             exit 1
@@ -153,13 +151,13 @@ jobs:
           grep "Recompiling sfunnel BPF program" output || (echo "ERROR: unable to validate it loads params (DEBUG)" && exit 1)
           grep "\-DDEBUG=1" output || (echo "ERROR: unable to validate it loads params (DEBUG, CFLAGS)" && exit 1)
 
-      - name: "[TEST] Run container with DEBUG=1 and custom ruleset ..."
+      - name: "[TEST] Run container with DEBUG=1 ..."
         run: |
           RULE="ip saddr 127.0.0.1 udp dport 80 actions unfunnel udp"
           echo "$RULE" > ruleset
 
           set -o pipefail
-          docker run --privileged -e DEBUG=1 -v `pwd`/ruleset:/opt/sfunnel/src/ruleset sfunnel:latest 2>&1 | tee output
+          docker run --privileged -e DEBUG=1 -v `pwd`/ruleset:/etc/sfunnel/ruleset sfunnel:latest 2>&1 | tee output
           if [ ${PIPESTATUS[0]} -ne 0 ]; then
             echo "ERROR: container execution FAILED!"
             exit 1
@@ -167,7 +165,6 @@ jobs:
 
           grep "\$DEBUG='1'" output || (echo "ERROR: unable to validate it loads custom file ruleset DEBUG=1" && exit 1)
           grep "\-DDEBUG=1" output || (echo "ERROR: unable to validate it loads custom file ruleset DEBUG=1, CFLAGS" && exit 1)
-          grep "Using a custom ruleset" output || (echo "ERROR: unable to validate it loads custom file ruleset DEBUG=1" && exit 1)
           grep "Recompiling sfunnel BPF program" output || (echo "ERROR: unable to validate it loads custom file ruleset DEBUG=1" && exit 1)
           grep "$RULE" output || (echo "ERROR: unable to validate it loads custom file ruleset DEBUG=1" && exit 1)
 
@@ -175,7 +172,7 @@ jobs:
         run: |
           set -o pipefail
           set +e
-          docker run --privileged -e DEBUG=1 -e IFACES=invalid sfunnel:latest 2>&1 | tee output
+          docker run --privileged -e DEBUG=1 -e IFACES=invalid -v `pwd`/ruleset:/etc/sfunnel/ruleset sfunnel:latest 2>&1 | tee output
           if [ ${PIPESTATUS[0]} -eq 0 ]; then
             echo "ERROR: container succeded when it should have FAILED!"
             exit 1
@@ -186,7 +183,7 @@ jobs:
         run: |
           set -o pipefail
           set +e
-          docker run --privileged -e DEBUG=1 -e DIRECTION=invalid sfunnel:latest 2>&1 | tee output
+          docker run --privileged -e DEBUG=1 -e DIRECTION=invalid -v `pwd`/ruleset:/etc/sfunnel/ruleset sfunnel:latest 2>&1 | tee output
           if [ ${PIPESTATUS[0]} -eq 0 ]; then
             echo "ERROR: container succeded when it should have FAILED!"
             exit 1
@@ -197,7 +194,7 @@ jobs:
       - name: "[TEST] Run container with DIRECTION=ingress ..."
         run: |
           set -o pipefail
-          docker run --privileged -e DEBUG=1 -e DIRECTION=ingress sfunnel:latest 2>&1 | tee output
+          docker run --privileged -e DEBUG=1 -e DIRECTION=ingress -v `pwd`/ruleset:/etc/sfunnel/ruleset sfunnel:latest 2>&1 | tee output
           if [ ${PIPESTATUS[0]} -ne 0 ]; then
             echo "ERROR: container execution FAILED!"
             exit 1
@@ -207,7 +204,7 @@ jobs:
       - name: "[TEST] Run container with DIRECTION=egress ..."
         run: |
           set -o pipefail
-          docker run --privileged -e DEBUG=1 -e DIRECTION=egress sfunnel:latest 2>&1 | tee output
+          docker run --privileged -e DEBUG=1 -e DIRECTION=egress -v `pwd`/ruleset:/etc/sfunnel/ruleset sfunnel:latest 2>&1 | tee output
           if [ ${PIPESTATUS[0]} -ne 0 ]; then
             echo "ERROR: container execution FAILED!"
             exit 1
@@ -217,7 +214,7 @@ jobs:
       - name: "[TEST] Run container with DIRECTION=both ..."
         run: |
           set -o pipefail
-          docker run --privileged -e DEBUG=1 -e DIRECTION=both sfunnel:latest 2>&1 | tee output
+          docker run --privileged -e DEBUG=1 -e DIRECTION=both -v `pwd`/ruleset:/etc/sfunnel/ruleset sfunnel:latest 2>&1 | tee output
           if [ ${PIPESTATUS[0]} -ne 0 ]; then
             echo "ERROR: container execution FAILED!"
             exit 1
@@ -234,7 +231,7 @@ jobs:
           sudo ip link set up dev veth1
 
           #First attach to veth
-          docker run --privileged --network=host -e DEBUG=1 -e DIRECTION=both -e IFACES=veth0 sfunnel:latest 2>&1 | tee output
+          docker run --privileged --network=host -e DEBUG=1 -e DIRECTION=both -e IFACES=veth0 -v `pwd`/ruleset:/etc/sfunnel/ruleset sfunnel:latest 2>&1 | tee output
           if [ ${PIPESTATUS[0]} -ne 0 ]; then
             echo "ERROR: container execution FAILED!"
             exit 1
@@ -256,7 +253,7 @@ jobs:
 
           #First run with an invalid netns, make sure it fails
           set +e
-          docker run --privileged --network=host -v /var/run/netns:/var/run/netns -e NETNS=test_ns_invalid -e DEBUG=1 -e IFACES=lo sfunnel:latest 2>&1 | tee output
+          docker run --privileged --network=host -v /var/run/netns:/var/run/netns -v `pwd`/ruleset:/etc/sfunnel/ruleset -e NETNS=test_ns_invalid -e DEBUG=1 -e IFACES=lo sfunnel:latest 2>&1 | tee output
           if [ ${PIPESTATUS[0]} -eq 0 ]; then
             echo "ERROR: container succeded when it should have FAILED!"
             exit 1
@@ -271,7 +268,7 @@ jobs:
           set -e
 
           #Successful run
-          docker run --privileged --network=host -v /var/run/netns:/var/run/netns -e NETNS=test_ns -e DEBUG=1 -e IFACES=lo sfunnel:latest 2>&1 | tee output
+          docker run --privileged --network=host -v /var/run/netns:/var/run/netns -v `pwd`/ruleset:/etc/sfunnel/ruleset -e NETNS=test_ns -e DEBUG=1 -e IFACES=lo sfunnel:latest 2>&1 | tee output
           if [ ${PIPESTATUS[0]} -ne 0 ]; then
             echo "ERROR: container execution FAILED!"
             exit 1
