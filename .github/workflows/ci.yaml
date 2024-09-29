@@ -6,7 +6,7 @@ on:
 
 env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-  PLATFORMS: linux/amd64
+  PLATFORMS: "linux/amd64 linux/arm64"
 
 permissions:
   packages: write
@@ -18,11 +18,15 @@ jobs:
       matrix:
         combination:
           #Debug
-          - { kernel: 'Linux 6.8', runner: 'ubuntu-24.04', clangs: 'clang-14 clang-15 clang-16 clang-17 clang-18', debug: '1' }
-
+          - { arch: 'linux/amd64', kernel: 'Linux 6.8', runner: 'ubuntu-24.04', clangs: 'clang-14 clang-15 clang-16 clang-17 clang-18', debug: '1' }
+          - { arch: 'linux/arm64', kernel: 'Linux 6.8', runner: 'ubuntu-24.04', clangs: 'clang-14 clang-15 clang-16 clang-17 clang-18', debug: '1' }
           #NDEBUG
-          - { kernel: 'Linux 6.8', runner: 'ubuntu-24.04', clangs: 'clang-14 clang-15 clang-16 clang-17 clang-18', debug: '0' }
+          - { arch: 'linux/amd64', kernel: 'Linux 6.8', runner: 'ubuntu-24.04', clangs: 'clang-14 clang-15 clang-16 clang-17 clang-18', debug: '0' }
+          - { arch: 'linux/arm64', kernel: 'Linux 6.8', runner: 'ubuntu-24.04', clangs: 'clang-14 clang-15 clang-16 clang-17 clang-18', debug: '0' }
     runs-on: ${{ matrix.combination.runner }}
+    env:
+      CLANGS: ${{matrix.combination.clangs}}
+      DEBUG: ${{matrix.combination.debug}}
     steps:
       - name: "Checkout sfunnel"
         uses: actions/checkout@v4
@@ -31,35 +35,45 @@ jobs:
           fetch-depth: 0
           fetch-tags: 1
 
+      - name: Set up QEMU for ARM64
+        if: matrix.combination.arch == 'linux/arm64'
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: ${{matrix.combination.arch}}
+
+      - name: Set up QMEU run environment if not amd64
+        if: matrix.combination.arch == 'linux/arm64'
+        run: |
+            docker run --name test --platform linux/arm64 -d arm64v8/ubuntu bash -c "sleep infinity"
+            echo "QEMU_ENV=docker exec -e CLANGS -e DEBUG test " >> $GITHUB_ENV
+            docker exec test bash -c "apt-get update && apt-get install -y sudo software-properties-common"
+
       - name: "Install deps..."
         run: |
-          sudo add-apt-repository universe
-          sudo apt-get update
-          sudo apt-get install -y ${{matrix.combination.clangs}} make iproute2 \
+          $QEMU_ENV sudo add-apt-repository universe
+          $QEMU_ENV sudo apt-get update
+          $QEMU_ENV sudo apt-get install -y ${{matrix.combination.clangs}} make iproute2 \
                                   bridge-utils python3-scapy python3-pip libbpf-dev \
                                   libelf-dev linux-headers-generic \
                                   linux-libc-dev llvm iptables
-          sudo ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/asm
-          if [[ "${{ matrix.combination.runner }}" == "ubuntu-24.04" ]]; then
-            sudo apt-get install python3-pytest
-          else
-            sudo pip3 install pytest #pytest binary missing in python3-pytest
-          fi
+          $QEMU_ENV sudo ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/asm
+          $QEMU_ENV sudo apt-get install -y python3-pytest
+
       - name: "Allow test traffic in iptables/nftables"
         run: |
-          sudo iptables -L -n
-          sudo iptables -t nat -L -n
-          sudo iptables -I FORWARD -s 11.1.1.1 -j ACCEPT
+          $QEMU_ENV sudo iptables -L -n
+          $QEMU_ENV sudo iptables -t nat -L -n
+          $QEMU_ENV sudo iptables -I FORWARD -s 11.1.1.1 -j ACCEPT
 
       - name: "Run tests on '${{matrix.combination.clangs}}'..."
         run: |
-          cd sfunnel/test
-          for clang in ${{matrix.combination.clangs}}; do
-            echo "[${clang}] Running tests ..."
-            make VERBOSE=1 CLANG=${clang} DEBUG=${{matrix.combination.debug}} || ( echo "FAILED: test failed with '${clang}' debug='${{matrix.combination.debug}}'" && exit 1 )
-            make clean 2>&1 > /dev/null
-            echo "[${clang}]"
-          done
+          $QEMU_ENV cd sfunnel/test; \
+            for CLANG in ${CLANGS}; do \
+              echo \"[${CLANG}] Running tests ...\"; \
+              make VERBOSE=1 CLANG=${CLANG} DEBUG=${DEBUG} || ( echo \"FAILED: test failed with '${CLANG}' debug='${DEBUG}'\" && exit 1 );\
+              make clean 2>&1 > /dev/null; \
+              echo \"[${CLANG}]\"; \
+            done
 
   docker_build_test_publish:
     needs: [make_check]
