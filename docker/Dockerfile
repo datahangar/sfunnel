@@ -19,7 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY tools/ /opt/sfunnel/tools/
 COPY src/ /opt/sfunnel/src/
 COPY ./docker/entrypoint.sh /opt/sfunnel
-RUN chmod +x /opt/sfunnel/entrypoint.sh && \
+RUN rm /opt/sfunnel/src/ruleset.default && \
+  chmod +x /opt/sfunnel/entrypoint.sh && \
   ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/asm && \
   echo "${VERSION}(${COMMIT})" > /opt/sfunnel/VERSION
 

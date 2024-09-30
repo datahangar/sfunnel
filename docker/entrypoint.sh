@@ -40,7 +40,7 @@ PROG=/opt/sfunnel/src/tc_sfunnel.o
 #either via file or ENV
 compile(){
 	cd /opt/sfunnel/src
-	DEBUG=${DEBUG} make
+	DEBUG=${DEBUG} FILE=/etc/sfunnel/ruleset make
 }
 
 #$1: PROG
