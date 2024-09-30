@@ -120,6 +120,17 @@ jobs:
           grep "Recompiling sfunnel BPF program" output || (echo "ERROR: unable to validate it loads the rulset file" && exit 1)
           grep "$RULE" output || (echo "ERROR: unable to validate it loads the ruleset file" && exit 1)
 
+      - name: "[TEST] Run container with invalid SFUNNEL_RULESET. Should fail..."
+        run: |
+          set -o pipefail
+          set +e
+          docker run --privileged --network=host -e SFUNNEL_RULESET="XXX" -e DEBUG=1 -e IFACES=lo sfunnel:latest 2>&1 | tee output
+          if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            echo "ERROR: container succeded when it should have FAILED!"
+            exit 1
+          fi
+          set -e
+
       - name: "[TEST] Run container with ruleset via SFUNNEL_RULESET (no override)..."
         run: |
           RULE="ip saddr 127.0.0.2 udp dport 80 actions unfunnel udp"
