@@ -1,6 +1,6 @@
 all: compile
 
-FILE := $(or $(wildcard ruleset), ruleset.default)
+FILE ?= ruleset.default
 CFLAGS = -O2 -Wall -Werror -g
 ifeq ($(DEBUG), 1)
     CFLAGS += -DDEBUG=1
