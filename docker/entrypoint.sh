@@ -115,7 +115,7 @@ if [[ "${CLEAN}" == "1" ]]; then
 else
 	#Check that a ruleset has been defined
 	if [[ "${SFUNNEL_RULESET}" == "" && ! -f /etc/sfunnel/ruleset ]]; then
-		echo "[ERROR] Neither '\$SFUNNEL_RULSET' is defined nor '/etc/sfunnel/ruleset' present. Aborting..."
+		echo "[ERROR] Neither '\$SFUNNEL_RULESET' is defined nor '/etc/sfunnel/ruleset' present. Aborting..."
 		exit 1
 	fi
 
