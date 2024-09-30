@@ -100,8 +100,7 @@ unload:
 
 compile:
 	$(QUIET)rm ../src/ruleset.h || true
-	$(QUIET)python3 ../tools/gen.py ruleset > ruleset.h
-	$(CLANG) -DDEBUG=$(DEBUG) -DTEST_TCP_FUNNELING=1 -O2 -Wall -Werror -I./ -g -target bpf -c ../src/sfunnel.c -o tc_sfunnel.o
+	cd ../src && ( DEBUG=1 FILE=../test/ruleset make ) && mv tc_sfunnel.o ../test/
 
 clean: unload
 	$(QUIET)rm -rf *.o || true
