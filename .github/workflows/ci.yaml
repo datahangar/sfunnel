@@ -301,5 +301,5 @@ jobs:
           echo "TAG=${TAG}, EXACT_TAG=${EXACT_TAG}"
           if [[ "${EXACT_TAG}" != "" ]]; then
             echo "Pushing to ghcr.io..."
-            docker buildx build --platform ${PLATFORMS} --push -f docker/Dockerfile . --tag ghcr.io/${GITHUB_REPOSITORY}:${TAG}
+            docker buildx build --platform ${PLATFORMS} --build-arg VERSION="$(git describe)" --build-arg COMMIT="${GITHUB_SHA}" --push -f docker/Dockerfile . --tag ghcr.io/${GITHUB_REPOSITORY}:${TAG}
           fi
