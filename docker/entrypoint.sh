@@ -7,7 +7,7 @@ if [[ ${NETNS} != "" ]]; then
 	if [[ ${_NETNS} == "" ]]; then
 		echo "Entering netns='${NETNS}'..."
 		export _NETNS="${NETNS}"
-		env > .env
+		env | awk -F'=' '{print $1"=\"" $2"\""}' > .env
 		if [[ "${DEBUG}" == "1" ]]; then
 			cat .env
 		fi
