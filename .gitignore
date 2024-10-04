@@ -5,5 +5,5 @@
 *.l[oa]
 *.swp
 *.swo
-test/.*
+test/ns/.*
 __pycache__/

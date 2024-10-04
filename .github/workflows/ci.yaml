@@ -51,9 +51,9 @@ jobs:
           sudo iptables -t nat -L -n
           sudo iptables -I FORWARD -s 11.1.1.1 -j ACCEPT
 
-      - name: "Run tests on '${{matrix.combination.clangs}}'..."
+      - name: "Run Linux NS tests on '${{matrix.combination.clangs}}'..."
         run: |
-          cd sfunnel/test
+          cd sfunnel/test/ns
           for clang in ${{matrix.combination.clangs}}; do
             echo "[${clang}] Running tests ..."
             make VERBOSE=1 CLANG=${clang} DEBUG=${{matrix.combination.debug}} || ( echo "FAILED: test failed with '${clang}' debug='${{matrix.combination.debug}}'" && exit 1 )

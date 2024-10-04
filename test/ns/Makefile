@@ -99,8 +99,8 @@ unload:
 	$(QUIET)sudo tc filter del dev veth1 ingress || true
 
 compile:
-	$(QUIET)rm ../src/ruleset.h || true
-	cd ../src && ( DEBUG=1 FILE=../test/ruleset make ) && mv tc_sfunnel.o ../test/
+	$(QUIET)rm ../../src/ruleset.h || true
+	cd ../../src && ( DEBUG=1 FILE=../test/ns/ruleset make ) && mv tc_sfunnel.o ../test/ns/
 
 clean: unload
 	$(QUIET)rm -rf *.o || true
