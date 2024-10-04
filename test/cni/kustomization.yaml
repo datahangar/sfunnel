@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../example/k8s/
+
+patches:
+  - path: example-patch.yaml
+    target:
+      kind: Deployment
+      name: my-nginx-deployment

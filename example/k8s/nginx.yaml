@@ -1,9 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-nginx-config
+data:
+  nginx.conf: |
+    events {}
+    http {
+      server {
+        listen 80;
+        location / {
+          return 200 'Served on port 80 by $hostname\n';
+          add_header Content-Type text/plain;
+        }
+      }
+      server {
+        listen 8080;
+        location / {
+          return 200 'Served on port 8080 by $hostname\n';
+          add_header Content-Type text/plain;
+        }
+      }
+    }
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: my-nginx-deployment
 spec:
-  replicas: 1
+  replicas: 4
   selector:
     matchLabels:
       app: my-nginx-app
@@ -14,23 +38,34 @@ spec:
     spec:
       initContainers:
         - name: sfunnel-init
-          image: ghcr.io/datahangar/sfunnel:0.0.8@sha256:53c6ad27e82903b853876b5dbcc6f612f0d94ec61f78ec4759865f5e2b50de12
+          image: ghcr.io/datahangar/sfunnel:0.0.11@sha256:5f130c2bfc95fb0d264ad54c52b1fef26c58e5635f11b8b862efe611b98b1f9a
+          imagePullPolicy: IfNotPresent
           env:
+            - name: DEBUG
+              value: "1"
             - name: SFUNNEL_RULESET
               value: ip tcp dport 80 sport 540 actions unfunnel tcp
           securityContext:
-            privileged: false
+            privileged: false #Set to true for some public clouds (e.g. GKE standard)
             capabilities:
                add: [BPF, NET_ADMIN, SYS_ADMIN]
           volumeMounts:
             - name: bpffs
               mountPath: /sys/fs/bpf
       containers:
-        - name: nginx
-          image: nginx:latest
-          ports:
-            - containerPort: 80
+      - name: nginx
+        image: nginx:latest
+        ports:
+          - containerPort: 80
+          - containerPort: 8080
+        volumeMounts:
+        - name: my-nginx-config-volume
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
       volumes:
-        - name: bpffs
-          hostPath:
-            path: /sys/fs/bpf
+      - name: my-nginx-config-volume
+        configMap:
+          name: my-nginx-config
+      - name: bpffs
+        hostPath:
+          path: /sys/fs/bpf

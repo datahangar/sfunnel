@@ -12,7 +12,7 @@ it is still in an early development stage.
 
 ## At a glance
 
-Example where `TCP/8080` and `TCP/443` traffic is funneled through `TCP/80`.
+Example where `TCP/8080` traffic is funneled through `TCP/80`.
 
 Remove _ports_ from the K8s service and e.g. deployment. Add the `sfunnel`
 container along with the [rules](docs/rules.md) in `SFUNNEL_RULESET`:
@@ -36,9 +36,6 @@ container along with the [rules](docs/rules.md) in `SFUNNEL_RULESET`:
 -    - protocol: TCP
 -      port: 8080
 -      targetPort: 8080
--    - protocol: TCP
--      port: 443
--      targetPort: 443
    sessionAffinity: ClientIP
 ```
 
@@ -65,9 +62,9 @@ container along with the [rules](docs/rules.md) in `SFUNNEL_RULESET`:
 +          env:
 +            - name: SFUNNEL_RULESET
 +              value: ip tcp dport 80 sport 540 actions unfunnel tcp
-+          image: ghcr.io/datahangar/sfunnel:0.0.8@sha256:53c6ad27e82903b853876b5dbcc6f612f0d94ec61f78ec4759865f5e2b50de12
++          image: ghcr.io/datahangar/sfunnel:0.0.11@sha256:5f130c2bfc95fb0d264ad54c52b1fef26c58e5635f11b8b862efe611b98b1f9a
 +          securityContext:
-+            privileged: false
++            privileged: false #Set to true for some public clouds (e.g. GKE standard)
 +            capabilities:
 +              add: [BPF, NET_ADMIN, SYS_ADMIN]
 +          volumeMounts:
@@ -78,12 +75,13 @@ container along with the [rules](docs/rules.md) in `SFUNNEL_RULESET`:
            ports:
              - containerPort: 80
 -            - containerPort: 8080
--            - containerPort: 443
 +     volumes:
 +       - name: bpffs
 +         hostPath:
 +           path: /sys/fs/bpf
 ```
+(_Note: funneling HTTPs `TCP/443` through `TCP/80` would work the same way. Manifest
+is just too long for this example_)
 
 On the other end (e.g. a Linux host, server etc..), deploy it with the
 matching [rules](docs/rules.md):
