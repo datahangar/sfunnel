@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 #
 # Check affinity between port 80 and 8080
 #
@@ -41,11 +43,20 @@ check_affinity(){
 }
 
 #Wait for nginx to be operative
+echo "Waiting for ${LB_IP}:80 to return a valid HTTP response..."
 while $( [[ "$(get_pod ${LB_IP}:80 | grep my-nginx-deployment)" == "" ]] ); do
 	sleep 1
-
 done
+sudo ip netns exec client curl -s ${LB_IP}:80
 
+#Make sure service at 8080 is also reachable (no misconfigs)
+echo "Waiting for ${LB_IP}:8080 to return a valid HTTP response..."
+while $( [[ "$(get_pod ${LB_IP}:8080 | grep my-nginx-deployment)" == "" ]] ); do
+	sleep 1
+done
+sudo ip netns exec client curl -s ${LB_IP}:8080
+
+#Check affinity
 i=1
 while true; do
 	echo "Iteration ${i}/${ITERATIONS}..."
