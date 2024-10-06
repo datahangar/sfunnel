@@ -67,7 +67,9 @@ jobs:
       matrix:
         combination:
           - { runner: 'ubuntu-24.04', cni: 'cilium',  nodes: '1' }
+          - { runner: 'ubuntu-24.04', cni: 'cilium-kpr',  nodes: '1' }
           - { runner: 'ubuntu-24.04', cni: 'cilium',  nodes: '2' }
+          - { runner: 'ubuntu-24.04', cni: 'cilium-kpr',  nodes: '2' }
 
           - { runner: 'ubuntu-24.04', cni: 'calico',  nodes: '2' }
           - { runner: 'ubuntu-24.04', cni: 'flannel', nodes: '2' }
@@ -111,7 +113,7 @@ jobs:
         env:
           CNI: ${{matrix.combination.cni}}
           NODES: ${{matrix.combination.nodes}}
-          MAX_ITERATIONS: 15
+          MAX_ITERATIONS: 30
         timeout-minutes: 5
         run: |
           cd sfunnel/example/k8s
@@ -138,7 +140,7 @@ jobs:
                 exit 1
               fi
               ((i++))
-              sleep 3
+              sleep 5
             done
           done
 

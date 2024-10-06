@@ -2,7 +2,6 @@
 
 SHELL=/bin/bash
 
-CNI ?= cilium
 CPUS ?= 4
 NODES ?= 1
 
@@ -17,6 +16,13 @@ ifeq ($(VERBOSE),1)
 else
     QUIET := @
 endif
+
+CNI ?= cilium
+ifeq ($(CNI),cilium-kpr)
+    override CNI := cilium
+    CILIUM_KPR := 1
+endif
+
 CLANG ?= clang
 
 ITERATIONS ?= 10
@@ -30,6 +36,12 @@ clean: _delete_ns _stop_minikube
 
 _start_minikube:
 	$(QUIET) minikube start --nodes $(NODES) --cni=$(CNI) --cpus=$(CPUS) --addons=metallb
+	$(QUIET) if [[ "$(CILIUM_KPR)" == "1" ]]; then \
+	           echo "Setting kube-proxy-replacement=true..."; \
+	           cilium config set kube-proxy-replacement true; \
+	           echo "Waiting for cilium to restart..."; \
+	           while [[ "$$(minikube kubectl -- -n kube-system get pods | grep cilium- | grep -v envoy | grep -v operator | grep Running)" == "" ]]; do sleep 1; done; \
+	         fi
 _stop_minikube:
 	$(QUIET) minikube delete || true
 
