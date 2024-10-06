@@ -98,7 +98,10 @@ jobs:
         run: |
           cd sfunnel/test/cni/
           make VERBOSE=1 CNI=${{matrix.combination.cni}} || ( echo "FAILED: test failed with cni='${matrix.combination.cni}' debug='${{matrix.combination.debug}}'" && exit 1 )
-          make VERBOSE=1 _unload #This MUST make the next check fail
+          #Remove funneling
+          make VERBOSE=1 _unload
+          minikube kubectl -- apply -k ../../.github/workflows/negative/
+          #This MUST now fail
           ( make VERBOSE=1 _check_affinity && ( echo "FAILED: negative test succeeded with cni='${matrix.combination.cni}' debug='${{matrix.combination.debug}}' when it should have failed!" && exit 1 ) ) || true
 
   docker_build_test_publish:

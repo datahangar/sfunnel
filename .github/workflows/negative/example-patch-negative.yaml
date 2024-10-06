@@ -1,0 +1,10 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-nginx-deployment
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: sfunnel-init-egress
+          $patch: delete
