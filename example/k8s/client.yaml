@@ -1,0 +1,119 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: client-script
+data:
+  client.sh: |
+    #!/bin/bash
+
+    set -e
+
+    #
+    # Check affinity between port 80 and 8080
+    #
+    # $1: IP or FQDN
+    #
+
+    #$1: URL
+    get_pod(){
+            curl -s ${1} | sed 's/^.*by\s*//'
+    }
+
+    #Install curl
+    apt-get update && apt-get install -y curl
+
+    #Wait for nginx to be operative
+    echo "Waiting for ${1}:80 to return a valid HTTP response..."
+    while $( [[ "$(get_pod ${1}:80 | grep my-nginx-deployment)" == "" ]] ); do
+            sleep 1
+    done
+    curl -s ${1}:80
+
+    #Make sure service at 8080 is also reachable (no misconfigs)
+    echo "Waiting for ${1}:8080 to return a valid HTTP response..."
+    while $( [[ "$(get_pod ${1}:8080 | grep my-nginx-deployment)" == "" ]] ); do
+            sleep 1
+    done
+    curl -s ${1}:8080
+
+    #Now check affinity
+    while true; do
+      HTTP=$(get_pod ${1}:80)
+      ALT_HTTP=$(get_pod ${1}:8080)
+      if [[ "${HTTP}" != "${ALT_HTTP}" ]]; then
+              echo "ERROR: affinity NOT respected"
+              echo "HTTP: ${HTTP}"
+              echo "ALT_HTTP: ${ALT_HTTP}"
+              exit 1
+      fi
+
+      echo "Serving pod: "
+      echo "  HTTP:     ${HTTP}"
+      echo "  ALT_HTTP: ${ALT_HTTP}"
+
+      sleep 1
+    done
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-web-client
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: my-web-client
+  template:
+    metadata:
+      labels:
+        app: my-web-client
+    spec:
+      initContainers:
+        - name: sfunnel-init
+          image: ghcr.io/datahangar/sfunnel:0.0.11@sha256:5f130c2bfc95fb0d264ad54c52b1fef26c58e5635f11b8b862efe611b98b1f9a
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DEBUG
+              value: "1"
+            - name: SFUNNEL_RULESET
+              value: ip tcp sport 80 dport 540 actions unfunnel tcp
+          securityContext:
+            privileged: false #Set to true for some public clouds (e.g. GKE standard)
+            capabilities:
+               add: [BPF, NET_ADMIN, SYS_ADMIN]
+          volumeMounts:
+            - name: bpffs
+              mountPath: /sys/fs/bpf
+        - name: sfunnel-init-egress
+          image: ghcr.io/datahangar/sfunnel:0.0.11@sha256:5f130c2bfc95fb0d264ad54c52b1fef26c58e5635f11b8b862efe611b98b1f9a
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DEBUG
+              value: "1"
+            - name: DIRECTION
+              value: egress
+            - name: SFUNNEL_RULESET
+              value: ip tcp dport 8080 actions funnel tcp dport 80 sport 540
+          securityContext:
+            privileged: false #Set to true for some public clouds (e.g. GKE standard)
+            capabilities:
+               add: [BPF, NET_ADMIN, SYS_ADMIN]
+          volumeMounts:
+            - name: bpffs
+              mountPath: /sys/fs/bpf
+      containers:
+        - name: affinity-check-container
+          image: debian:stable-slim
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "-c", "bash /root/client.sh my-clusterip-service"]
+          volumeMounts:
+          - name: client-script-volume
+            mountPath: /root/client.sh
+            subPath: client.sh
+      volumes:
+      - name: client-script-volume
+        configMap:
+          name: client-script
+      - name: bpffs
+        hostPath:
+          path: /sys/fs/bpf

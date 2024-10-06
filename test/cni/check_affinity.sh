@@ -5,6 +5,8 @@ set -e
 #
 # Check affinity between port 80 and 8080
 #
+# $1: LB_IP or FQDN
+#
 # Env:
 # $ITERATIONS: number of iterations (~1sec per iteration)
 # $SRC_IPS: check affinity from (e.g. "192.168.254.2 192.168.254.3")
@@ -14,7 +16,7 @@ if [[ "${DEBUG}" != "" ]]; then
 fi
 
 ITERATIONS=${ITERATIONS:-1}
-LB_IP=${LB_IP:-$(minikube kubectl -- get service my-loadbalancer-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')}
+LB_IP=${1:-$(minikube kubectl -- get service my-loadbalancer-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')}
 
 #$1: URL
 #$2: SRC_IP

@@ -96,7 +96,7 @@ jobs:
             sudo pip3 install pytest #pytest binary missing in python3-pytest
           fi
 
-      - name: "Run CNI test nodes='${{ matrix.combination.nodes }}' cni='${{ matrix.combination.cni }}'..."
+      - name: "Run LoadBalancer test nodes='${{ matrix.combination.nodes }}' cni='${{ matrix.combination.cni }}'..."
         env:
           CNI: ${{matrix.combination.cni}}
           NODES: ${{matrix.combination.nodes}}
@@ -105,6 +105,50 @@ jobs:
           make NODES=${NODES} CNI=${CNI} VERBOSE=1 || ( echo "FAILED: test failed with cni='${CNI}' nodes='${NODES}'" && exit 1 )
           echo "Pods (after positive test):"
           minikube kubectl -- get pods -o wide
+
+      - name: "Run ClusterIP test nodes='${{ matrix.combination.nodes }}' cni='${{ matrix.combination.cni }}'..."
+        if: matrix.combination.cni != 'cilium' #Cilium non-KPR bug #35254
+        env:
+          CNI: ${{matrix.combination.cni}}
+          NODES: ${{matrix.combination.nodes}}
+          MAX_ITERATIONS: 15
+        timeout-minutes: 5
+        run: |
+          cd sfunnel/example/k8s
+          minikube kubectl -- apply -f client.yaml
+          minikube kubectl -- get pods -o wide
+          echo "Waiting for all pods to be running (filter spureous starts)..."
+          while [[ "$(minikube kubectl -- get pods | grep client | grep -v Running)" != "" ]]; do
+            echo "Not ready, waiting..."
+            minikube kubectl -- get pods -o wide
+            sleep 1;
+          done
+
+          for POD in $(minikube kubectl -- get pods | grep client | awk '{print $1}'); do
+            echo "Waiting for '${POD}' to have completed at least one query..."
+            i=1
+            while true; do
+              if [[ "$(minikube kubectl -- logs ${POD} | grep 'Serving pod')" != "" ]]; then
+                break
+              fi
+
+              if [[ $i -eq ${MAX_ITERATIONS} ]]; then
+                echo "ERROR: '${POD}' never converged..."
+                minikube kubectl -- logs ${POD}
+                exit 1
+              fi
+              ((i++))
+              sleep 3
+            done
+          done
+
+      - name: "[NEGATIVE test] Check LoadBalancer affinity test must fail nodes='${{ matrix.combination.nodes }}' cni='${{ matrix.combination.cni }}'..."
+        env:
+          CNI: ${{matrix.combination.cni}}
+          NODES: ${{matrix.combination.nodes}}
+          MAX_ITERATIONS: 15
+        run: |
+          cd sfunnel/test/cni/
           #Remove funneling
           make VERBOSE=1 _unload
           minikube kubectl -- apply -k ../../.github/workflows/negative/

@@ -4,29 +4,3 @@ metadata:
   name: my-nginx-deployment
 spec:
   replicas: 12
-  template:
-    spec:
-      initContainers:
-        - name: sfunnel-init
-          image: sfunnel #local
-          imagePullPolicy: IfNotPresent
-          env:
-            - name: SFUNNEL_RULESET
-              value: "ip tcp dport 80 sport 540 actions unfunnel tcp; ip tcp dport 80 sport 541 actions unfunnel udp"
-        - name: sfunnel-init-egress
-          image: sfunnel #local
-          imagePullPolicy: IfNotPresent
-          env:
-            - name: DEBUG
-              value: "1"
-            - name: SFUNNEL_RULESET
-              value: "ip tcp sport 8080 actions funnel tcp dport 540 sport 80"
-            - name: DIRECTION
-              value: "egress"
-          securityContext:
-            privileged: false #Set to true for some public clouds (e.g. GKE standard)
-            capabilities:
-               add: [BPF, NET_ADMIN, SYS_ADMIN]
-          volumeMounts:
-            - name: bpffs
-              mountPath: /sys/fs/bpf
