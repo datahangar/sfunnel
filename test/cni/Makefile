@@ -64,10 +64,10 @@ _compile:
 	$(QUIET) cd ../../docker && make
 	$(QUIET) minikube image load sfunnel
 _load:
-	$(QUIET) docker run --privileged --network=host -v /var/run/netns:/var/run/netns -it -e NETNS=client -e IFACES=veth1 -e SFUNNEL_RULESET=$(RULESET_EGRESS) -e DEBUG=1 -e DIRECTION=egress sfunnel
-	$(QUIET) docker run --privileged --network=host -v /var/run/netns:/var/run/netns -it -e NETNS=client -e IFACES=veth1 -e SFUNNEL_RULESET=$(RULESET_INGRESS) -e DEBUG=1 -e DIRECTION=ingress sfunnel
+	$(QUIET) docker run --privileged --network=host -v /var/run/netns:/var/run/netns -i -e NETNS=client -e IFACES=veth1 -e SFUNNEL_RULESET=$(RULESET_EGRESS) -e DEBUG=1 -e DIRECTION=egress sfunnel
+	$(QUIET) docker run --privileged --network=host -v /var/run/netns:/var/run/netns -i -e NETNS=client -e IFACES=veth1 -e SFUNNEL_RULESET=$(RULESET_INGRESS) -e DEBUG=1 -e DIRECTION=ingress sfunnel
 _unload:
-	$(QUIET) docker run --privileged --network=host -v /var/run/netns:/var/run/netns -it -e NETNS=client -e IFACES=veth1 -e CLEAN=1 -e DEBUG=1 -e DIRECTION=both sfunnel
+	$(QUIET) docker run --privileged --network=host -v /var/run/netns:/var/run/netns -i -e NETNS=client -e IFACES=veth1 -e CLEAN=1 -e DEBUG=1 -e DIRECTION=both sfunnel
 
 _wait_up:
 	$(QUIET) echo "Waiting for service to be up..."
