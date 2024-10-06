@@ -25,7 +25,7 @@ RULESET_INGRESS := "ip tcp sport 80 dport 540 actions unfunnel tcp"
 SRC_IPS := 192.168.254.2 192.168.254.3 192.168.254.4 192.168.254.5 192.168.254.6 192.168.254.7 192.168.254.8 192.168.254.9 192.168.254.10 192.168.254.11
 
 all: check
-check: _start_minikube _compile _deploy _create_ns _wait_up _load _check_affinity
+check: _start_minikube _compile _deploy _create_ns _load _check_affinity
 clean: _delete_ns _stop_minikube
 
 _start_minikube:
@@ -59,6 +59,7 @@ _delete_ns:
 
 _deploy:
 	$(QUIET) minikube kubectl -- apply -k .
+
 _undeploy:
 	$(QUIET) minikube kubectl -- delete -k . || true
 
@@ -76,5 +77,10 @@ _wait_up:
 	$(QUIET) while [[ "$$(kubectl get service my-loadbalancer-service | grep pending)" != "" ]]; do sleep 1; done
 	$(QUIET) echo "Service is up!"
 
-_check_affinity:
+_wait_running:
+	$(QUIET) echo "Waiting for all pods to be up & running..."
+	$(QUIET) while [[ "$$(minikube kubectl -- get pods | grep my-nginx-deployment | grep -v Running)" != "" ]]; do sleep 1; done
+	$(QUIET) echo "All up!"
+
+_check_affinity: _wait_up _wait_running
 	$(QUIET) SRC_IPS="$(SRC_IPS)" ITERATIONS=$(ITERATIONS) ./check_affinity.sh

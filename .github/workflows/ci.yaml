@@ -103,10 +103,14 @@ jobs:
         run: |
           cd sfunnel/test/cni/
           make NODES=${NODES} CNI=${CNI} VERBOSE=1 || ( echo "FAILED: test failed with cni='${CNI}' nodes='${NODES}'" && exit 1 )
+          echo "Pods (after positive test):"
+          minikube kubectl -- get pods -o wide
           #Remove funneling
           make VERBOSE=1 _unload
           minikube kubectl -- apply -k ../../.github/workflows/negative/
           #This MUST now fail
+          echo "Pods (before negative test):"
+          minikube kubectl -- get pods -o wide
           ( make VERBOSE=1 _check_affinity && ( echo "FAILED: negative test succeeded with cni='${CNI}' nodes='${NODES}' when it should have failed!" && exit 1 ) ) || true
 
   docker_build_test_publish:
