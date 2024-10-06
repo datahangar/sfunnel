@@ -7,7 +7,7 @@ affinity across all _ports_ within the service.
 
 See the original use-case [here](docs/use-cases/network-telemetry-nfacctd.md).
 
-:warning: While `sfunnel` should be fully functional, and has been [validated](#tested-environments),
+:warning: While `sfunnel` should be fully functional, and has been [validated](#support),
 it is still in an early development stage.
 
 ## At a glance
@@ -70,6 +70,20 @@ container along with the [rules](docs/rules.md) in `SFUNNEL_RULESET`:
 +          volumeMounts:
 +            - name: bpffs
 +              mountPath: /sys/fs/bpf
++        - name: sfunnel-init-egress
++          env:
++            - name: SFUNNEL_RULESET
++              value: ip tcp sport 8080 actions funnel tcp dport 540 sport 80
++            - name: DIRECTION
++              value: egress
++          image: ghcr.io/datahangar/sfunnel:0.0.11@sha256:5f130c2bfc95fb0d264ad54c52b1fef26c58e5635f11b8b862efe611b98b1f9a
++          securityContext:
++            privileged: false #Set to true for some public clouds (e.g. GKE standard)
++            capabilities:
++              add: [BPF, NET_ADMIN, SYS_ADMIN]
++          volumeMounts:
++            - name: bpffs
++              mountPath: /sys/fs/bpf
          - name: nginx
            image: nginx:latest
            ports:
@@ -80,21 +94,40 @@ container along with the [rules](docs/rules.md) in `SFUNNEL_RULESET`:
 +         hostPath:
 +           path: /sys/fs/bpf
 ```
-(_Note: funneling HTTPs `TCP/443` through `TCP/80` would work the same way. Manifest
+(_funneling HTTPs `TCP/443` through `TCP/80` would work the same way. Manifest
 is just too long for this example_)
 
 On the other end (e.g. a Linux host, server etc..), deploy it with the
 matching [rules](docs/rules.md):
 
 ```shell
-SFUNNEL_RULESET="ip daddr <your LB IP1> tcp port 443 actions funnel tcp dport 80 sport 540;\
-  ip daddr <your LB IP1> tcp port 8080 actions funnel tcp dport 80 sport 540"
-docker run --network="host" --privileged -e SFUNNEL_RULESET="$SFUNNEL_RULESET" sfunnel
+IFACES=eth0 LB_IP=1.1.1.1 \
+SFUNNEL_RULESET="ip daddr ${LB_IP} tcp dport 8080 actions funnel tcp dport 80 sport 540" \
+docker run --privileged --network=host -it -e IFACES -e DIRECTION="egress" -e SFUNNEL_RULESET ghcr.io/datahangar/sfunnel:0.0.11
+```
+
+```shell
+IFACES=eth0 LB_IP=1.1.1.1 \
+SFUNNEL_RULESET="ip saddr ${LB_IP} tcp sport 80 dport 540 actions unfunnel tcp" \
+docker run --privileged --network=host -it -e IFACES -e DIRECTION="ingress" -e SFUNNEL_RULESET ghcr.io/datahangar/sfunnel:0.0.11
 ```
 
 The `sfunnel` container will run, load the eBPF code and finish its execution.
 
-## Tested environments
+## Support
+
+### Service types
+
+* `ClusterIP`: supported
+* `LoadBalancer`: supported
+* `NodePort`: _untested, but should work_
+
+> :pencil: **Note**
+>
+> Currently `internalTrafficPolicy: Local` for `ClusterIP` and
+> `externalTrafficPolicy: Local` for `NodePort` and `LoadBalancer` services are required.
+
+### Environments
 
 * **Google Kubernetes Engine(GKE)**: Standard cluster.
    - Autopilot clusters are _not supported_ due to lack of eBPF support.

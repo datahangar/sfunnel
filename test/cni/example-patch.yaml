@@ -4,3 +4,14 @@ metadata:
   name: my-nginx-deployment
 spec:
   replicas: 12
+  template:
+    spec:
+      initContainers:
+        - name: sfunnel-init
+          env:
+            - name: DEBUG
+              value: "1"
+        - name: sfunnel-init-egress
+          env:
+            - name: DEBUG
+              value: "1"

@@ -36,6 +36,8 @@ _start_minikube:
 			while [[ "$$(minikube kubectl -- -n kube-system get pods | grep -v NAME | grep -v Running)" != "" ]]; do sleep 1; done; \
 			echo "All running!"; \
 		 fi
+	$(QUIET) minikube kubectl -- apply -f metallb-conf.yaml
+
 _stop_minikube:
 	$(QUIET) minikube delete || true
 

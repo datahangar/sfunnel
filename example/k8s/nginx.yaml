@@ -41,8 +41,6 @@ spec:
           image: ghcr.io/datahangar/sfunnel:0.0.11@sha256:5f130c2bfc95fb0d264ad54c52b1fef26c58e5635f11b8b862efe611b98b1f9a
           imagePullPolicy: IfNotPresent
           env:
-            - name: DEBUG
-              value: "1"
             - name: SFUNNEL_RULESET
               value: ip tcp dport 80 sport 540 actions unfunnel tcp
           securityContext:
@@ -56,8 +54,6 @@ spec:
           image: ghcr.io/datahangar/sfunnel:0.0.11@sha256:5f130c2bfc95fb0d264ad54c52b1fef26c58e5635f11b8b862efe611b98b1f9a
           imagePullPolicy: IfNotPresent
           env:
-            - name: DEBUG
-              value: "1"
             - name: SFUNNEL_RULESET
               value: ip tcp sport 8080 actions funnel tcp dport 540 sport 80
             - name: DIRECTION
