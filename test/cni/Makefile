@@ -18,9 +18,10 @@ else
 endif
 CLANG ?= clang
 
-TIMER ?= 12
+ITERATIONS ?= 10
 RULESET_EGRESS := "ip tcp dport 8080 actions funnel tcp dport 80 sport 540; ip udp dport 8080 actions funnel tcp dport 80 sport 541;"
 RULESET_INGRESS := "ip tcp sport 80 dport 540 actions unfunnel tcp"
+SRC_IPS := 192.168.254.2 192.168.254.3 192.168.254.4 192.168.254.5 192.168.254.6 192.168.254.7 192.168.254.8 192.168.254.9 192.168.254.10 192.168.254.11
 
 all: check
 check: _start_minikube _compile _deploy _create_ns _wait_up _load _check_affinity
@@ -38,7 +39,7 @@ _create_ns:
 	$(QUIET) sudo ip link set netns client veth1
 	$(QUIET) sudo ip addr add 192.168.254.1/24 dev veth0
 	$(QUIET) sudo ip netns exec client ip link set up dev veth1
-	$(QUIET) sudo ip netns exec client ip addr add 192.168.254.2/24 dev veth1
+	$(QUIET) for IP in $(SRC_IPS); do sudo ip netns exec client ip addr add $${IP}/24 dev veth1; done
 	$(QUIET) sudo ip netns exec client ip route add default via 192.168.254.1
 	$(QUIET) sudo iptables -I FORWARD -s 10.0.0.0/8 -j ACCEPT
 	$(QUIET) sudo iptables -I FORWARD -d 10.0.0.0/8 -j ACCEPT
@@ -75,4 +76,4 @@ _wait_up:
 	$(QUIET) echo "Service is up!"
 
 _check_affinity:
-	$(QUIET) ./check_affinity.sh $(TIMER)
+	$(QUIET) SRC_IPS="$(SRC_IPS)" ITERATIONS=$(ITERATIONS) ./check_affinity.sh
