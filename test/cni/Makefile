@@ -4,6 +4,7 @@ SHELL=/bin/bash
 
 CNI ?= cilium
 CPUS ?= 4
+NODES ?= 1
 
 ifeq ($(DEBUG),1)
     DEBUG := 1
@@ -28,7 +29,7 @@ check: _start_minikube _compile _deploy _create_ns _wait_up _load _check_affinit
 clean: _delete_ns _stop_minikube
 
 _start_minikube:
-	$(QUIET) minikube start --cni=$(CNI) --cpus=$(CPUS) --addons=metallb
+	$(QUIET) minikube start --nodes $(NODES) --cni=$(CNI) --cpus=$(CPUS) --addons=metallb
 _stop_minikube:
 	$(QUIET) minikube delete || true
 
@@ -45,7 +46,7 @@ _create_ns:
 	$(QUIET) sudo iptables -I FORWARD -d 10.0.0.0/8 -j ACCEPT
 	$(QUIET) sudo iptables -I FORWARD -s 192.168.240.0/20 -j ACCEPT
 	$(QUIET) sudo iptables -I FORWARD -d 192.168.240.0/20 -j ACCEPT
-	$(QUIET) export MINIKUBE_IP=$$(minikube ip) && sudo ip route add 192.168.253.0/24 via $$MINIKUBE_IP
+	$(QUIET) export MINIKUBE_IPS="$$(minikube kubectl -- get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}')" && sudo ip route add 192.168.253.0/24 $$(for IP in $${MINIKUBE_IPS}; do echo "nexthop via $${IP}"; done)
 	$(QUIET) sudo bash -c "echo 1 > /proc/sys/net/ipv4/ip_forward"
 _delete_ns:
 	$(QUIET) sudo ip route del $$(ip route show 192.168.253.0/24) || true

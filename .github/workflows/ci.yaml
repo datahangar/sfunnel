@@ -66,10 +66,12 @@ jobs:
       fail-fast: false
       matrix:
         combination:
-          - { runner: 'ubuntu-24.04', cni: 'kindnet', debug: '1' }
-          - { runner: 'ubuntu-24.04', cni: 'cilium', debug: '1' }
-          - { runner: 'ubuntu-24.04', cni: 'calico', debug: '1' }
-          - { runner: 'ubuntu-24.04', cni: 'flannel', debug: '1' }
+          - { runner: 'ubuntu-24.04', cni: 'cilium',  nodes: '1' }
+          - { runner: 'ubuntu-24.04', cni: 'cilium',  nodes: '2' }
+
+          - { runner: 'ubuntu-24.04', cni: 'calico',  nodes: '2' }
+          - { runner: 'ubuntu-24.04', cni: 'flannel', nodes: '2' }
+          - { runner: 'ubuntu-24.04', cni: 'kindnet', nodes: '2' }
     runs-on: ${{ matrix.combination.runner }}
     steps:
       - name: "Checkout sfunnel"
@@ -94,15 +96,18 @@ jobs:
             sudo pip3 install pytest #pytest binary missing in python3-pytest
           fi
 
-      - name: "Run CNI test cni='${{ matrix.combination.cni }}'..."
+      - name: "Run CNI test nodes='${{ matrix.combination.nodes }}' cni='${{ matrix.combination.cni }}'..."
+        env:
+          CNI: ${{matrix.combination.cni}}
+          NODES: ${{matrix.combination.nodes}}
         run: |
           cd sfunnel/test/cni/
-          make VERBOSE=1 CNI=${{matrix.combination.cni}} || ( echo "FAILED: test failed with cni='${matrix.combination.cni}' debug='${{matrix.combination.debug}}'" && exit 1 )
+          make NODES=${NODES} CNI=${CNI} VERBOSE=1 || ( echo "FAILED: test failed with cni='${CNI}' nodes='${NODES}'" && exit 1 )
           #Remove funneling
           make VERBOSE=1 _unload
           minikube kubectl -- apply -k ../../.github/workflows/negative/
           #This MUST now fail
-          ( make VERBOSE=1 _check_affinity && ( echo "FAILED: negative test succeeded with cni='${matrix.combination.cni}' debug='${{matrix.combination.debug}}' when it should have failed!" && exit 1 ) ) || true
+          ( make VERBOSE=1 _check_affinity && ( echo "FAILED: negative test succeeded with cni='${CNI}' nodes='${NODES}' when it should have failed!" && exit 1 ) ) || true
 
   docker_build_test_publish:
     needs: [check_unit, check_cni_example]
