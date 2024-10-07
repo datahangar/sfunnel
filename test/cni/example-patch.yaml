@@ -8,10 +8,12 @@ spec:
     spec:
       initContainers:
         - name: sfunnel-init
+          image: sfunnel
           env:
             - name: DEBUG
               value: "1"
         - name: sfunnel-init-egress
+          image: sfunnel
           env:
             - name: DEBUG
               value: "1"
