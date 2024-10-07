@@ -30,6 +30,12 @@ clean: _delete_ns _stop_minikube
 
 _start_minikube:
 	$(QUIET) minikube start --nodes $(NODES) --cni=$(CNI) --cpus=$(CPUS) --addons=metallb
+	$(QUIET) if [[ "$(CNI)" == "cilium" ]]; then \
+			cilium config set enable-session-affinity true; \
+			echo "Waiting for cilium to restart..."; \
+			while [[ "$$(minikube kubectl -- -n kube-system get pods | grep -v NAME | grep -v Running)" != "" ]]; do sleep 1; done; \
+			echo "All running!"; \
+		 fi
 _stop_minikube:
 	$(QUIET) minikube delete || true
 

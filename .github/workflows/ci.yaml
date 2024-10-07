@@ -96,6 +96,16 @@ jobs:
             sudo pip3 install pytest #pytest binary missing in python3-pytest
           fi
 
+      - name: "[cilium] Install CLI"
+        if: matrix.combination.cni == 'cilium'
+        run: |
+          CILIUM_CLI_VERSION=$(curl -s https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt)
+          GOOS=$(go env GOOS)
+          GOARCH=$(go env GOARCH)
+          wget https://github.com/cilium/cilium-cli/releases/download/${CILIUM_CLI_VERSION}/cilium-${GOOS}-${GOARCH}.tar.gz
+          sudo tar -C /usr/local/bin -xzvf cilium-${GOOS}-${GOARCH}.tar.gz
+          rm cilium-${GOOS}-${GOARCH}.tar.gz
+
       - name: "Run LoadBalancer test nodes='${{ matrix.combination.nodes }}' cni='${{ matrix.combination.cni }}'..."
         env:
           CNI: ${{matrix.combination.cni}}
@@ -107,7 +117,6 @@ jobs:
           minikube kubectl -- get pods -o wide
 
       - name: "Run ClusterIP test nodes='${{ matrix.combination.nodes }}' cni='${{ matrix.combination.cni }}'..."
-        if: matrix.combination.cni != 'cilium' #Cilium non-KPR bug #35254
         env:
           CNI: ${{matrix.combination.cni}}
           NODES: ${{matrix.combination.nodes}}
