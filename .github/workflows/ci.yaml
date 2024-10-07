@@ -85,7 +85,7 @@ jobs:
         run: |
           sudo add-apt-repository universe
           sudo apt-get update
-          sudo apt-get install -y clang make iproute2 \
+          sudo apt-get install -y clang make iproute2 iperf \
                                   bridge-utils python3-scapy python3-pip libbpf-dev \
                                   libelf-dev linux-headers-generic \
                                   linux-libc-dev llvm iptables
@@ -165,6 +165,17 @@ jobs:
           echo "Pods (before negative test):"
           minikube kubectl -- get pods -o wide
           ( make VERBOSE=1 _check_affinity && ( echo "FAILED: negative test succeeded with cni='${CNI}' nodes='${NODES}' when it should have failed!" && exit 1 ) ) || true
+
+      - name: "Performance test nodes='${{ matrix.combination.nodes }}' cni='${{ matrix.combination.cni }}'..."
+        env:
+          CNI: ${{matrix.combination.cni}}
+          NODES: ${{matrix.combination.nodes}}
+        run: |
+          cd sfunnel/test/cni/
+          make VERBOSE=1 _check_perf
+
+          #Create the markdown report
+          python3 perf/gen_report.py >> $GITHUB_STEP_SUMMARY
 
   docker_build_test_publish:
     needs: [check_unit, check_cni_example]
