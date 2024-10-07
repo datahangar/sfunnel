@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-nginx-deployment
+spec:
+  replicas: 4
+  template:
+    spec:
+      initContainers:
+        - name: sfunnel-init
+          image: sfunnel
+        - name: sfunnel-init-egress
+          image: sfunnel
+      containers:
+        - name: nginx
+          image: debian:stable-slim
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+          command: ["/bin/bash", "-c", "apt-get update && apt-get install -y iproute2 iperf && ip link set eth0 mtu 1450 && (iperf -s -p 80 &) && (iperf -s -p 8080 &) && sleep 5 && echo 'Up and running...' && tail -f /dev/null "]

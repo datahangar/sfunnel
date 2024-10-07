@@ -74,6 +74,9 @@ _undeploy:
 _compile:
 	$(QUIET) cd ../../docker && make
 	$(QUIET) minikube image load sfunnel
+_load_perf:
+	$(QUIET) docker run --privileged --network=host -v /var/run/netns:/var/run/netns -i -e NETNS=client -e IFACES=veth1 -e SFUNNEL_RULESET=$(RULESET_EGRESS) -e DIRECTION=egress sfunnel
+	$(QUIET) docker run --privileged --network=host -v /var/run/netns:/var/run/netns -i -e NETNS=client -e IFACES=veth1 -e SFUNNEL_RULESET=$(RULESET_INGRESS) -e DIRECTION=ingress sfunnel
 _load:
 	$(QUIET) docker run --privileged --network=host -v /var/run/netns:/var/run/netns -i -e NETNS=client -e IFACES=veth1 -e SFUNNEL_RULESET=$(RULESET_EGRESS) -e DEBUG=1 -e DIRECTION=egress sfunnel
 	$(QUIET) docker run --privileged --network=host -v /var/run/netns:/var/run/netns -i -e NETNS=client -e IFACES=veth1 -e SFUNNEL_RULESET=$(RULESET_INGRESS) -e DEBUG=1 -e DIRECTION=ingress sfunnel
@@ -92,3 +95,28 @@ _wait_running:
 
 _check_affinity: _wait_up _wait_running
 	$(QUIET) SRC_IPS="$(SRC_IPS)" ITERATIONS=$(ITERATIONS) ./check_affinity.sh
+
+_check_perf: _wait_up _wait_running
+	$(QUIET) echo "Adjusting NS MTU..."
+	$(QUIET) sudo ip netns exec client ip link set veth1 mtu 1450
+	$(QUIET) echo "Unloading DEBUG sfunnel in NS..."
+	$(QUIET) $(MAKE) _unload
+	$(QUIET) echo "Loading NDEBUG sfunnel in NS..."
+	$(QUIET) $(MAKE) _load_perf
+	$(QUIET) echo "Replacing nginx with iperf temporally..."
+	$(QUIET) minikube kubectl -- apply -k perf/
+	$(QUIET) echo "Wait for all containers to be up and running..."
+	$(QUIET) while [[ "$$(minikube kubectl -- get pods | grep my-nginx | grep -v Running)" != "" ]]; do sleep 1; done
+	$(QUIET) for POD in $$(minikube kubectl -- get pods | grep my-nginx | awk '{print $$1}'); do \
+	           while [[ "$$(minikube kubectl -- logs $$POD | grep 'Up and running...')" == ""  ]]; do sleep 1; done; \
+	         done;
+	$(QUIET) echo "Launching iperf tests..."
+	set -o pipefail; \
+	NETNS=client ./perf/check_perf.sh 2>&1 | tee .last_perf_report.txt; \
+	if [[ $${PIPESTATUS[0]} -ne 0 ]]; then echo "check_perf failed!"; exit 1; fi
+	$(QUIET) echo "Unloading NDEBUG sfunnel in NS..."
+	$(QUIET) $(MAKE) _unload
+	$(QUIET) echo "Loading DEBUG sfunnel in NS..."
+	$(QUIET) $(MAKE) _load
+	$(QUIET) echo "Restoring nginx..."
+	$(QUIET) $(MAKE) _deploy
