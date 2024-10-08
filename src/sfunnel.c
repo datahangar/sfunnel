@@ -28,6 +28,7 @@ int ip4_funnel(struct __sk_buff* skb, __u8* eth, struct iphdr* ip, void* l4,
 	__u32 fhdr_size;
 	__u32 l4_csum_off;
 	__be32 old_csum, new_csum;
+	__be16 id; //IPv4 identification (TCP only)
 
 	//L4 header to funnel
 	if(old_l4_proto == IPPROTO_UDP){
@@ -97,6 +98,20 @@ int ip4_funnel(struct __sk_buff* skb, __u8* eth, struct iphdr* ip, void* l4,
 	struct ver_ihl_tos_totlen old_totlen = *(struct ver_ihl_tos_totlen*)ip;
 	ip->tot_len = bpf_htons(bpf_ntohs(ip->tot_len)+fhdr_size);
 	diff = bpf_csum_diff((__be32*)&old_totlen, 4, (__be32*)ip, 4, diff);
+
+	if(funn_proto == IPPROTO_TCP){
+		//Set it to a fixed value (0x1234), and use 2 MSB of ack_seq to
+		//save the original identification. This will later be restored
+		//when unfunneling, as it is needed to support transporting
+		//fragmented packets.
+		id = ip->id;
+
+		__be32 aux = *(__be32*)&ip->id;
+		ip->id = bpf_htons(0x1234);
+
+		//Calc ip diff for identification
+		diff = bpf_csum_diff(&aux, 4, (__be32*)&ip->id, 4, diff);
+	}
 
 	//Adjust IP checksum and make room for the new L4 hdr
 	rc = bpf_l3_csum_replace(skb, l3_off + offsetof(struct iphdr, check),
@@ -177,13 +192,17 @@ int ip4_funnel(struct __sk_buff* skb, __u8* eth, struct iphdr* ip, void* l4,
 		tcp->dest = bpf_htons(dst_port);
 		tcp->source = bpf_htons(src_port);
 		tcp->seq = bpf_htonl(0xCAFEBABE);
-		tcp->ack_seq = bpf_htonl(0xBABECAFE);
 		*((&tcp->ack_seq)+1) = tcp->urg_ptr = tcp->check = 0x0;
 		tcp->syn = 0x1;
 		tcp->window = bpf_htons(1024);
 		tcp->doff = sizeof(*tcp)/4;
 		tcp->check = 0x0;
 
+		//Save original id field in ack_seq
+		*((__be16*)&tcp->ack_seq) = id;
+		*(((__be16*)&tcp->ack_seq)+1) = bpf_htons(0xFEED);
+
+		//Whole new TCP hdr
 		diff = bpf_csum_diff(0, 0, (__be32*)tcp, sizeof(*tcp), diff);
 
 		//Set checksum
@@ -202,12 +221,17 @@ int ip4_unfunnel(struct __sk_buff* skb, struct iphdr* ip, const __u8 proto){
 
 	__u32 fhdr_size;
 	__u32 l4_csum_off;
+	__be16 id; //IPv4 identification (TCP only)
 
 	//L4 funneling header
 	if(ip->protocol == IPPROTO_UDP){
 		fhdr_size = sizeof(struct udphdr);
 	}else if(ip->protocol == IPPROTO_TCP){
 		fhdr_size = sizeof(struct tcphdr);
+		struct tcphdr *tcp =
+				(struct tcphdr *)((__u8*)ip + (ip->ihl * 4));
+		CHECK_SKB_PTR(skb, tcp+1);
+		id = *(__be16*)&tcp->ack_seq;
 	}else{
 		PRINTK("ERROR: IP funneling proto %d not supported!",
 							ip->protocol);
@@ -235,6 +259,13 @@ int ip4_unfunnel(struct __sk_buff* skb, struct iphdr* ip, const __u8 proto){
 	if(diff < 0){
 		PRINTK("ERROR csum_diff: %d", diff);
 		return TC_ACT_SHOT;
+	}
+
+	//Restore original IPv4 flow identification
+	if(proto == IPPROTO_TCP){
+		__be32 aux = *(__be32*)&ip->id;
+		ip->id = id;
+		diff = bpf_csum_diff(&aux, 4, (__be32*)&ip->id, 4, diff);
 	}
 
 	//Modify checksum and remove funneling hdr
