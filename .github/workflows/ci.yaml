@@ -174,12 +174,8 @@ jobs:
           cd sfunnel/test/cni/
           make VERBOSE=1 _check_perf
 
-          #Create the markdown report (TODO improve txt)
-          echo "# Performance report" >> $GITHUB_STEP_SUMMARY
-          echo "CNI: ${CNI}" >> $GITHUB_STEP_SUMMARY
-          echo "Number of nodes: ${NODES}" >> $GITHUB_STEP_SUMMARY
-          echo "## Results" >> $GITHUB_STEP_SUMMARY
-          cat .last_perf_report.txt >> $GITHUB_STEP_SUMMARY
+          #Create the markdown report
+          python3 perf/gen_report.py >> $GITHUB_STEP_SUMMARY
 
   docker_build_test_publish:
     needs: [check_unit, check_cni_example]

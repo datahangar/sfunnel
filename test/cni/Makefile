@@ -111,15 +111,14 @@ _check_perf: _wait_up _wait_running
 	           while [[ "$$(minikube kubectl -- logs $$POD | grep 'Up and running...')" == ""  ]]; do sleep 1; done; \
 	         done;
 	$(QUIET) echo "Workaround lingering old conntrack (metallb/kubeproxy bug?)..."
-	$(QUIET) minikube ssh "sudo conntrack -F"
-	$(QUIET) sleep 10
+	$(QUIET) for NODE in $$(minikube node list | awk '{print $$1}'); do minikube ssh -n $${NODE} "sudo conntrack -F"; done;
 	$(QUIET) echo "Launching iperf tests..."
-	set -o pipefail; \
-	NETNS=client ./perf/check_perf.sh 2>&1 | tee .last_perf_report.txt; \
-	if [[ $${PIPESTATUS[0]} -ne 0 ]]; then echo "check_perf failed!"; exit 1; fi
+	DEBUG=1 NETNS=client python3 perf/check_perf.py
 	$(QUIET) echo "Unloading NDEBUG sfunnel in NS..."
 	$(QUIET) $(MAKE) _unload
 	$(QUIET) echo "Loading DEBUG sfunnel in NS..."
 	$(QUIET) $(MAKE) _load
 	$(QUIET) echo "Restoring nginx..."
 	$(QUIET) $(MAKE) _deploy
+	$(QUIET) echo "Print report..."
+	$(QUIET) python3 perf/gen_report.py
