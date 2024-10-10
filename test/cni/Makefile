@@ -113,10 +113,11 @@ _check_perf: _wait_up _wait_running
 	$(QUIET) echo "Workaround lingering old conntrack (metallb/kubeproxy bug?)..."
 	$(QUIET) for NODE in $$(minikube node list | awk '{print $$1}'); do minikube ssh -n $${NODE} "sudo conntrack -F"; done;
 	$(QUIET) echo "Launching iperf tests..."
-	DEBUG=1 NETNS=client python3 perf/check_perf.py
+	$(QUIET) python3 perf/gen_report.py
 	$(QUIET) echo "Unloading NDEBUG sfunnel in NS..."
 	$(QUIET) $(MAKE) _unload
 	$(QUIET) echo "Loading DEBUG sfunnel in NS..."
 	$(QUIET) $(MAKE) _load
 	$(QUIET) echo "Restoring nginx..."
 	$(QUIET) $(MAKE) _deploy
+	DEBUG=1 NETNS=client python3 perf/check_perf.py
