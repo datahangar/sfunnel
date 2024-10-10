@@ -54,7 +54,7 @@ def check_perf(test_name, fqdn, results, target_ports, src_ips=[]):
         'average_throughput': avg_throughput
     }
 
-    print(f"[{test_name}] Total throughput: {total_throughput}, Average throughput: {avg_throughput}")
+    print(f"[{test_name}] Total throughput: {total_throughput:.2f} Mbit/s, Average throughput: {avg_throughput:.2f} Mbit/s")
 
 def main():
     LB_IP = get_lb_ip()
