@@ -7,8 +7,10 @@ affinity across all _ports_ within the service.
 
 See the original use-case [here](docs/use-cases/network-telemetry-nfacctd.md).
 
-:warning: While `sfunnel` should be fully functional, and has been [validated](#support),
-it is still in an early development stage.
+:warning: `sfunnel` is still in an early development stage.
+
+:no_entry: severe performance degradation when TCP connections are funneled over
+TCP and UDP is being investigated (GSO/TSO). Do not use it.
 
 ## At a glance
 
