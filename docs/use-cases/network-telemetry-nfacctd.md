@@ -139,9 +139,9 @@ _Note: this was added later on, and was not part of the original prototype_
 
 At the same time, and in order to properly traverse NATs, during funneling the
 original L4 checksum is adjusted with `src_ip` and `dst_ip` set to a known value
-(`0x0`). This allows the unfunneling to readjust the checksum based on the diff
-between `0x0` and the acutal IP addresses of the packet then, without the need
-to pass extra state within the packet.
+(`0x0`). This allows the unfunneling code to readjust the checksum based on the
+diff between the known value `0x0` and the actual IP addresses of the packet at
+this point, without the need to pass extra state within the packet.
 
 #### Using an init container
 

@@ -9,8 +9,8 @@ See the original use-case [here](docs/use-cases/network-telemetry-nfacctd.md).
 
 :warning: `sfunnel` is still in an early development stage.
 
-:no_entry: severe performance degradation when TCP connections are funneled over
-TCP and UDP is being investigated (GSO/TSO). Do not use it.
+:no_entry: severe performance degradation when funneling TCP over TCP/UDP is
+being investigated (GSO/TSO issues). Do not use it for real traffic.
 
 ## At a glance
 
