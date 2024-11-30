@@ -1,12 +1,12 @@
 ##Matching funneling and unfunneling rules 1:1
-ip udp dport 2055 actions funnel tcp dport 179 sport 540
-ip tcp dport 179 sport 540 actions unfunnel udp
+ip udp dport 2055 actions funnel encap tcp dport 179 sport 540
+ip tcp dport 179 sport 540 actions unfunnel decap udp
 
-ip udp dport 2056 actions funnel udp dport 179 sport 540
-ip udp dport 179 sport 540 actions unfunnel udp
+ip udp dport 2056 actions funnel encap udp dport 179 sport 540
+ip udp dport 179 sport 540 actions unfunnel decap udp
 
-ip tcp dport 2055 actions funnel tcp dport 179 sport 541
-ip tcp dport 179 sport 541 actions unfunnel tcp
+ip tcp dport 2055 actions funnel encap tcp dport 179 sport 541
+ip tcp dport 179 sport 541 actions unfunnel decap tcp
 
-ip tcp dport 2056 actions funnel udp dport 179 sport 541
-ip udp dport 179 sport 541 actions unfunnel tcp
+ip tcp dport 2056 actions funnel encap udp dport 179 sport 541
+ip udp dport 179 sport 541 actions unfunnel decap tcp

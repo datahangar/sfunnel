@@ -20,8 +20,8 @@ endif
 CLANG ?= clang
 
 ITERATIONS ?= 10
-RULESET_EGRESS := "ip tcp dport 8080 actions funnel tcp dport 80 sport 540; ip udp dport 8080 actions funnel tcp dport 80 sport 541;"
-RULESET_INGRESS := "ip tcp sport 80 dport 540 actions unfunnel tcp"
+RULESET_EGRESS := "ip tcp dport 8080 actions funnel encap tcp dport 80 sport 540; ip udp dport 8080 actions funnel encap tcp dport 80 sport 541;"
+RULESET_INGRESS := "ip tcp sport 80 dport 540 actions unfunnel decap tcp"
 SRC_IPS := 192.168.254.2 192.168.254.3 192.168.254.4 192.168.254.5 192.168.254.6 192.168.254.7 192.168.254.8 192.168.254.9 192.168.254.10 192.168.254.11
 
 all: check

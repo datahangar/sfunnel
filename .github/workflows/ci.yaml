@@ -123,8 +123,9 @@ jobs:
           MAX_ITERATIONS: 15
         timeout-minutes: 5
         run: |
-          cd sfunnel/example/k8s
-          minikube kubectl -- apply -f client.yaml
+          cd sfunnel/.github/workflows/
+          cp ../../example/k8s/client.yaml cni_overlay
+          minikube kubectl -- apply -k cni_overlay/
           minikube kubectl -- get pods -o wide
           echo "Waiting for all pods to be running (filter spureous starts)..."
           while [[ "$(minikube kubectl -- get pods | grep client | grep -v Running)" != "" ]]; do
@@ -223,7 +224,7 @@ jobs:
 
       - name: "[TEST] Run container with ruleset file..."
         run: |
-          RULE="ip saddr 127.0.0.1 udp dport 80 actions unfunnel udp"
+          RULE="ip saddr 127.0.0.1 udp dport 80 actions unfunnel decap udp"
           echo "$RULE" > ruleset
 
           set -o pipefail
@@ -249,7 +250,7 @@ jobs:
 
       - name: "[TEST] Run container with ruleset via SFUNNEL_RULESET (no override)..."
         run: |
-          RULE="ip saddr 127.0.0.2 udp dport 80 actions unfunnel udp"
+          RULE="ip saddr 127.0.0.2 udp dport 80 actions unfunnel decap udp"
 
           set -o pipefail
           docker run -e SFUNNEL_RULESET="$RULE" --privileged sfunnel:latest 2>&1 | tee output
@@ -264,7 +265,7 @@ jobs:
 
       - name: "[TEST] Run container with ruleset via SFUNNEL_RULESET (override)..."
         run: |
-          RULE="ip saddr 127.0.0.2 udp dport 80 actions unfunnel udp" #Should override ruleset file with 127.0.0.1
+          RULE="ip saddr 127.0.0.2 udp dport 80 actions unfunnel decap udp" #Should override ruleset file with 127.0.0.1
 
           set -o pipefail
           docker run -e SFUNNEL_RULESET="$RULE" --privileged -v `pwd`/ruleset:/etc/sfunnel/ruleset sfunnel:latest 2>&1 | tee output
@@ -297,7 +298,7 @@ jobs:
 
       - name: "[TEST] Run container with DEBUG=1 ..."
         run: |
-          RULE="ip saddr 127.0.0.1 udp dport 80 actions unfunnel udp"
+          RULE="ip saddr 127.0.0.1 udp dport 80 actions unfunnel decap udp"
           echo "$RULE" > ruleset
 
           set -o pipefail
@@ -421,7 +422,7 @@ jobs:
           (grep "\$DEBUG='1'" output) || (echo "ERROR: unable to validate env. variables are passed to the NETNS execution" && exit 1)
 
           #Successful run with SFUNNEL_RULESET
-          RULE="ip saddr 127.0.0.2 udp dport 80 actions unfunnel udp"
+          RULE="ip saddr 127.0.0.2 udp dport 80 actions unfunnel decap udp"
           docker run --privileged --network=host -v /var/run/netns:/var/run/netns -e NETNS=test_ns -e DEBUG=1 -e SFUNNEL_RULESET="$RULE" -e IFACES=lo sfunnel:latest 2>&1 | tee output
           if [ ${PIPESTATUS[0]} -ne 0 ]; then
             echo "ERROR: container execution FAILED!"

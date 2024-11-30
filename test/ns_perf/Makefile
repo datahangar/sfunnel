@@ -42,11 +42,11 @@ check: _setup _load
 #  ...........                        ............
 #
 
-RULES_SVC_EGRESS  := "ip $(PROTO) sport 8080 actions funnel $(FUN_PROTO) sport 80 dport 540"
-RULES_SVC_INGRESS := "ip $(FUN_PROTO) dport 80 sport 540 actions unfunnel $(PROTO)"
+RULES_SVC_EGRESS  := "ip $(PROTO) sport 8080 actions funnel encap $(FUN_PROTO) sport 80 dport 540"
+RULES_SVC_INGRESS := "ip $(FUN_PROTO) dport 80 sport 540 actions unfunnel decap $(PROTO)"
 
-RULES_INGRESS     := "ip $(FUN_PROTO) sport 80 dport 540 actions unfunnel $(PROTO)"
-RULES_EGRESS      := "ip $(PROTO) dport 8080 actions funnel $(FUN_PROTO) sport 540 dport 80"
+RULES_INGRESS     := "ip $(FUN_PROTO) sport 80 dport 540 actions unfunnel decap $(PROTO)"
+RULES_EGRESS      := "ip $(PROTO) dport 8080 actions funnel encap $(FUN_PROTO) sport 540 dport 80"
 
 _setup:
 	$(QUIET)echo -n "Creating ifaces..."

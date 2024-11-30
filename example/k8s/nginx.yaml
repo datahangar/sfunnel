@@ -42,7 +42,7 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: SFUNNEL_RULESET
-              value: ip tcp dport 80 sport 540 actions unfunnel tcp
+              value: ip tcp dport 80 sport 540 actions unfunnel decap tcp
           securityContext:
             privileged: false #Set to true for some public clouds (e.g. GKE standard)
             capabilities:
@@ -55,7 +55,7 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: SFUNNEL_RULESET
-              value: ip tcp sport 8080 actions funnel tcp dport 540 sport 80
+              value: ip tcp sport 8080 actions funnel encap tcp dport 540 sport 80
             - name: DIRECTION
               value: egress
           securityContext:

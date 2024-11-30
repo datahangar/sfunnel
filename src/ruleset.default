@@ -1,7 +1,7 @@
 ##Funneling rules
-ip udp dport 2055 actions funnel tcp dport 179 sport 540 #Netflow
-ip udp dport 4739 actions funnel tcp dport 179 sport 540 #IPFIX
-ip udp dport 6343 actions funnel tcp dport 179 sport 540 #SFLOW
+ip udp dport 2055 actions funnel encap tcp dport 179 sport 540 #Netflow
+ip udp dport 4739 actions funnel encap tcp dport 179 sport 540 #IPFIX
+ip udp dport 6343 actions funnel encap tcp dport 179 sport 540 #SFLOW
 
 ##Unfunneling
-ip tcp dport 179 sport 540 actions unfunnel udp
+ip tcp dport 179 sport 540 actions unfunnel decap udp

@@ -60,8 +60,8 @@ match_patterns = [
 ]
 
 action_patterns = [
-    f"(funnel)\s*{param_re}\s*(sport|dport)\s*{param_re}\s*(sport|dport)\s*{param_re}",
-    f"(unfunnel)\s*{param_re}",
+    f"(funnel)\s*(encap)\s*{param_re}\s*(sport|dport)\s*{param_re}\s*(sport|dport)\s*{param_re}",
+    f"(unfunnel)\s*(decap)\s*{param_re}",
     f"(dnat)\s*{param_re}",
     f"(accept)",
     f"(drop)"
@@ -96,6 +96,32 @@ def extract_matches(string: str):
 
     return matches
 
+def extract_unfunnel(string, re_a):
+    a = {}
+    if re_a.groups()[1] == "decap":
+        if re_a.groups()[2] not in ["tcp", "udp"]:
+            raise ValueError(f"ERROR: protocol following unfunnel action must be 'tcp' or 'udp' in '{string}'")
+        a["value"] = re_a.groups()[2]
+    else:
+        raise ValueError(f"ERROR: unknown unfunnel mode {re_a.groups()[1]}")
+    return a
+
+def extract_funnel(string, re_a):
+    a = {}
+    if re_a.groups()[1] == "encap":
+        if re_a.groups()[2] not in ["tcp", "udp"]:
+            raise ValueError(f"ERROR: protocol following funnel action must be 'tcp' or 'udp' in '{string}'")
+        a["fun_proto"] = re_a.groups()[2]
+        if re_a.groups()[3] not in ["sport", "dport"]:
+            raise ValueError(f"ERROR: unknown header field '{re_a.groups()[3]}' in '{string}'")
+        a[re_a.groups()[3]] = re_a.groups()[4]
+        if re_a.groups()[5] not in ["sport", "dport"]:
+            raise ValueError(f"ERROR: unknown header field '{re_a.groups()[5]}' in '{string}'")
+        a[re_a.groups()[5]] = re_a.groups()[6]
+    else:
+        raise ValueError(f"ERROR: unknown unfunnel mode {re_a.groups()[1]}")
+    return a
+
 def extract_actions(string: str):
     s = string
     actions={}
@@ -105,25 +131,21 @@ def extract_actions(string: str):
         if not re_a:
             continue
         grp_len = len(re_a.groups())
-        if grp_len not in [1,2,6]:
+        if grp_len not in [1,3,7]:
             raise Exception(f"ERROR: parsing '{a_it}' in '{string}'")
         a = {}
-        if grp_len == 2:
+        if grp_len == 3:
             #Unfunnel/DNAT
-            if re_a.groups()[0] == "unfunnel" and re_a.groups()[1] not in ["tcp", "udp"]:
-                raise ValueError(f"ERROR: protocol following unfunnel action must be 'tcp' or 'udp' in '{string}'")
-            a["value"] = re_a.groups()[1]
-        elif grp_len == 6:
-            #Funnel
-            if re_a.groups()[1] not in ["tcp", "udp"]:
-                raise ValueError(f"ERROR: protocol following funnel action must be 'tcp' or 'udp' in '{string}'")
-            a["fun_proto"] = re_a.groups()[1]
-            if re_a.groups()[2] not in ["sport", "dport"]:
-                raise ValueError(f"ERROR: unknown heade field '{re_a.groups()[3]}' in '{string}'")
-            a[re_a.groups()[2]] = re_a.groups()[3]
-            if re_a.groups()[4] not in ["sport", "dport"]:
-                raise ValueError(f"ERROR: unknown heade field '{re_a.groups()[3]}' in '{string}'")
-            a[re_a.groups()[4]] = re_a.groups()[5]
+            if re_a.groups()[0] == "unfunnel":
+                a |= extract_unfunnel(string, re_a)
+            else:
+                raise ValueError(f"ERROR: unknown action {re_a.groups()[0]}")
+        elif grp_len == 7:
+            #Unfunnel/DNAT
+            if re_a.groups()[0] == "funnel":
+                a |= extract_funnel(string, re_a)
+            else:
+                raise ValueError(f"ERROR: unknown action {re_a.groups()[0]}")
 
         actions[re_a.groups()[0]] = a
         s = re.sub(pattern, "", s)
