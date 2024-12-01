@@ -5,7 +5,11 @@ resources:
   - ../../example/k8s/
 
 patches:
-  - path: example-patch.yaml
+  - path: example-svc-patch.yaml
     target:
       kind: Deployment
       name: my-nginx-deployment
+  - path: example-client-patch.yaml
+    target:
+      kind: Deployment
+      name: my-web-client

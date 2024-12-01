@@ -131,6 +131,9 @@ jobs:
           while [[ "$(minikube kubectl -- get pods | grep client | grep -v Running)" != "" ]]; do
             echo "Not ready, waiting..."
             minikube kubectl -- get pods -o wide
+            for POD in $(minikube kubectl -- get pods | grep client | awk '{print $1}'); do
+                minikube kubectl -- logs ${POD} --all-containers --previous || true
+            done
             sleep 1;
           done
 
