@@ -12,7 +12,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     clang \
     libbpf-dev \
     iproute2 \
+    ethtool \
+    procps \
     python3 \
+    jq \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 #Copy sfunnel stuff

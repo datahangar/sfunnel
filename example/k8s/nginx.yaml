@@ -44,7 +44,7 @@ spec:
             - name: SFUNNEL_RULESET
               value: ip tcp dport 80 sport 540 actions unfunnel tcp
           securityContext:
-            privileged: false #Set to true for some public clouds (e.g. GKE standard)
+            privileged: true
             capabilities:
                add: [BPF, NET_ADMIN, SYS_ADMIN]
           volumeMounts:
@@ -59,7 +59,7 @@ spec:
             - name: DIRECTION
               value: egress
           securityContext:
-            privileged: false #Set to true for some public clouds (e.g. GKE standard)
+            privileged: true
             capabilities:
                add: [BPF, NET_ADMIN, SYS_ADMIN]
           volumeMounts:

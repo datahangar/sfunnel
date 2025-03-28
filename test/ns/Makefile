@@ -91,8 +91,8 @@ setup:
 	$(QUIET)sudo ethtool --offload veth2 rx off tx off
 	$(QUIET)sudo ip netns exec ns2 ethtool --offload veth3 rx off tx off
 load:
-	$(QUIET)sudo ip netns exec ns1 tc filter add dev veth0 egress bpf da obj ./tc_sfunnel.o sec funnel verbose
-	$(QUIET)sudo tc filter add dev veth1 ingress bpf da obj ./tc_sfunnel.o sec funnel verbose
+	$(QUIET)sudo ip netns exec ns1 tc filter add dev veth0 egress bpf da obj ./tc_sfunnel.o verbose
+	$(QUIET)sudo tc filter add dev veth1 ingress bpf da obj ./tc_sfunnel.o verbose
 
 unload:
 	$(QUIET)sudo ip netns exec ns1 tc filter del dev veth0 egress || true

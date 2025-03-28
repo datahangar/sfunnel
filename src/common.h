@@ -15,8 +15,9 @@
 
 #define CHECK_SKB_PTR_VAL( SKB, PTR, VAL ) \
 	if (  (void*)(PTR) > ((void*)(unsigned long long) SKB -> data_end )) {	\
-		PRINTK("PTR: %p on pkt with length: %d out of bounds!\n",   \
-								PTR, SKB ->len);\
+		PRINTK("[%d:0x%p] PTR: 0x%p on pkt with length: %d out of bounds!\n",   \
+							SKB ->ifindex, SKB,	\
+							PTR, SKB ->len);	\
 		return VAL;							\
 	} do{}while(0)
 #define CHECK_SKB_PTR( SKB, PTR ) CHECK_SKB_PTR_VAL( SKB, PTR, TC_ACT_OK)
@@ -105,6 +106,14 @@ typedef struct sfunnel_ip4_rule {
 		sfunnel_action_params_t drop;
 	} actions;
 }sfunnel_ip4_rule_t;
+
+#if INGRESS != 1 && INGRESS != 0
+	#error INGRESS has to be either 1 or 0
+#endif
+#define PKT_REDIR_INGRESS (1UL << 16)
+#define PKT_REDIR_EGRESS  (1UL << 17)
+#define PKT_REDIR ( PKT_REDIR_INGRESS | PKT_REDIR_EGRESS )
+#define IP4_RULES_SIZE    (sizeof(ip4_rules) / sizeof(ip4_rules[0]))
 
 #include "ruleset.h"
 

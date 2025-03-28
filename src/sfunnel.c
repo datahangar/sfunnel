@@ -41,7 +41,8 @@ int ip4_funnel(struct __sk_buff* skb, __u8* eth, struct iphdr* ip, void* l4,
 		l4_csum_off  = (__u8*)l4 - eth + offsetof(struct tcphdr, check);
 		old_csum = old_tcp->check;
 	}else{
-		PRINTK("ERROR: IP funneled proto %d not supported!",
+		PRINTK("[%d:0x%p] ERROR: IP funneled proto %d not supported!",
+							skb->ifindex, skb,
 							old_l4_proto);
 		return TC_ACT_SHOT;
 	}
@@ -52,13 +53,15 @@ int ip4_funnel(struct __sk_buff* skb, __u8* eth, struct iphdr* ip, void* l4,
 	}else if(funn_proto == IPPROTO_TCP){
 		fhdr_size = sizeof(struct tcphdr);
 	}else{
-		PRINTK("ERROR: IP funneling proto %d not supported!",
+		PRINTK("[%d:0x%p] ERROR: IP funneling proto %d not supported!",
+							skb->ifindex, skb,
 							funn_proto);
 		return TC_ACT_SHOT;
 	}
 
-	PRINTK("[%p] Size: %d", skb, skb->len);
-	PRINTK("[%p] Funneling proto:%d packet thru proto: %d", skb,
+	PRINTK("[%d:0x%p] Size: %d", skb->ifindex, skb, skb->len);
+	PRINTK("[%d:0x%p] Funneling proto:%d packet thru proto: %d",
+							skb->ifindex, skb,
 							old_l4_proto,
 							funn_proto);
 	//Packet will likely traverse NATs. Set sip/dip for L4 csum
@@ -68,7 +71,8 @@ int ip4_funnel(struct __sk_buff* skb, __u8* eth, struct iphdr* ip, void* l4,
 
 	int rc = bpf_l4_csum_replace(skb, l4_csum_off, 0, diff, 0);
 	if(rc < 0){
-		PRINTK("ERROR l4_csum_replace: %d", rc);
+		PRINTK("[%d:0x%p] ERROR l4_csum_replace: %d", skb->ifindex, skb,
+							rc);
 		return TC_ACT_SHOT;
 	}
 
@@ -103,12 +107,14 @@ int ip4_funnel(struct __sk_buff* skb, __u8* eth, struct iphdr* ip, void* l4,
 							0,
 							diff, 0);
 	if(rc < 0){
-		PRINTK("ERROR l3_csum_replace: %d", rc);
+		PRINTK("[%d:0x%p] ERROR l3_csum_replace: %d", skb->ifindex, skb,
+								 rc);
 		return TC_ACT_SHOT;
 	}
 	rc = bpf_skb_adjust_room(skb, fhdr_size, BPF_ADJ_ROOM_NET, 0);
 	if(rc < 0){
-		PRINTK("ERROR adjust room: %d", rc);
+		PRINTK("[%d:0x%p] ERROR adjust room: %d", skb->ifindex, skb,
+								rc);
 		return TC_ACT_SHOT;
 	}
 
@@ -193,7 +199,7 @@ int ip4_funnel(struct __sk_buff* skb, __u8* eth, struct iphdr* ip, void* l4,
 	//Packet has been mangled, mark it as such
 	bpf_set_hash_invalid(skb);
 
-	PRINTK("[%p] Funneled size: %d!", skb, skb->len);
+	PRINTK("[%d:0x%p] Funneled size: %d!", skb->ifindex, skb, skb->len);
 	return TC_ACT_OK;
 }
 
@@ -209,13 +215,15 @@ int ip4_unfunnel(struct __sk_buff* skb, struct iphdr* ip, const __u8 proto){
 	}else if(ip->protocol == IPPROTO_TCP){
 		fhdr_size = sizeof(struct tcphdr);
 	}else{
-		PRINTK("ERROR: IP funneling proto %d not supported!",
+		PRINTK("[%d:0x%p] ERROR: IP funneling proto %d not supported!",
+							skb->ifindex, skb,
 							ip->protocol);
 		return TC_ACT_SHOT;
 	}
 
-	PRINTK("[%p] Size: %d", skb, skb->len);
-	PRINTK("[%p] Unfunneling funneling proto:%d packet, original L4 proto: %d", skb,
+	PRINTK("[%d:0x%p] Size: %d", skb->ifindex, skb, skb->len);
+	PRINTK("[%d:0x%p] Unfunneling funneling proto:%d packet, original L4 proto: %d",
+							skb->ifindex, skb,
 							ip->protocol, proto);
 
 	//Substract funneling HDR and recalc check
@@ -224,7 +232,8 @@ int ip4_unfunnel(struct __sk_buff* skb, struct iphdr* ip, const __u8 proto){
 	__s64 diff = bpf_csum_diff((__be32*)&old_ttl, 4, (__be32*)&ip->ttl, 4,
 								0);
 	if(diff < 0){
-		PRINTK("ERROR csum_diff: %d", diff);
+		PRINTK("[%d:0x%p] ERROR csum_diff: %d", skb->ifindex, skb,
+							diff);
 		return TC_ACT_SHOT;
 	}
 
@@ -233,7 +242,8 @@ int ip4_unfunnel(struct __sk_buff* skb, struct iphdr* ip, const __u8 proto){
 	ip->tot_len = bpf_htons(bpf_ntohs(ip->tot_len) - fhdr_size);
 	diff = bpf_csum_diff((__be32*)&old_totlen, 4, (__be32*)ip, 4, diff);
 	if(diff < 0){
-		PRINTK("ERROR csum_diff: %d", diff);
+		PRINTK("[%d:0x%p] ERROR csum_diff: %d", skb->ifindex, skb,
+							diff);
 		return TC_ACT_SHOT;
 	}
 
@@ -243,12 +253,14 @@ int ip4_unfunnel(struct __sk_buff* skb, struct iphdr* ip, const __u8 proto){
 							0,
 							diff, 0);
 	if(rc < 0){
-		PRINTK("ERROR l3_csum_replace: %d", rc);
+		PRINTK("[%d:0x%p] ERROR l3_csum_replace: %d", skb->ifindex, skb,
+							rc);
 		return TC_ACT_SHOT;
 	}
 	rc = bpf_skb_adjust_room(skb, -(__s32)fhdr_size, BPF_ADJ_ROOM_NET, 0);
 	if(rc < 0){
-		PRINTK("ERROR adjust room: %d", rc);
+		PRINTK("[%d:0x%p] ERROR adjust room: %d", skb->ifindex, skb,
+							rc);
 		return TC_ACT_SHOT;
 	}
 
@@ -266,7 +278,8 @@ int ip4_unfunnel(struct __sk_buff* skb, struct iphdr* ip, const __u8 proto){
 		CHECK_SKB_PTR(skb, l4+sizeof(struct tcphdr));
 		l4_csum_off  = (__u8*)l4 - eth + offsetof(struct tcphdr, check);
 	}else{
-		PRINTK("ERROR: IP funneled proto %d not supported!",
+		PRINTK("[%d:0x%p]ERROR: IP funneled proto %d not supported!",
+							skb->ifindex, skb,
 							proto);
 		return TC_ACT_SHOT;
 	}
@@ -276,19 +289,38 @@ int ip4_unfunnel(struct __sk_buff* skb, struct iphdr* ip, const __u8 proto){
 
 	rc = bpf_l4_csum_replace(skb, l4_csum_off, 0, diff, 0);
 	if(rc < 0){
-		PRINTK("ERROR l4_csum_replace: %d", rc);
+		PRINTK("[%d:0x%p] ERROR l4_csum_replace: %d", skb->ifindex, skb,
+								rc);
 		return TC_ACT_SHOT;
 	}
 
 	//Packet has been mangled, mark it as such
 	bpf_set_hash_invalid(skb);
 
-	PRINTK("[%p] Unfunneled size: %d!", skb, skb->len);
+	PRINTK("[%d:0x%p] Unfunneled size: %d!", skb->ifindex, skb, skb->len);
 
 	return TC_ACT_OK;
 }
 
-static inline int proc_ip4(struct __sk_buff* skb, __u8* eth, struct iphdr* ip){
+static inline
+int redirect_seg_pkt(struct __sk_buff* skb, bool ingress, __u16 rule_id){
+	//Redirecting all pkts, incl. non GSOed, to avoid reorderings.
+	__u8 _seg_mac[ETH_ALEN] = {SEG_PAIR_DEV_MAC};
+	bpf_skb_store_bytes(skb, offsetof(struct ethhdr, h_dest),
+					  _seg_mac, ETH_ALEN, 0);
+
+	skb->mark = ingress ? PKT_REDIR_INGRESS : PKT_REDIR_EGRESS;
+	skb->mark |= rule_id;
+
+	PRINTK("[%d:0x%p] Redirecting %d->%d mark: 0x%x", skb->ifindex, skb,
+							skb->ifindex,
+							SEG_DEV_IFINDEX,
+							skb->mark);
+	return bpf_redirect(SEG_DEV_IFINDEX, 0);
+}
+
+static inline
+int proc_ip4(struct __sk_buff* skb, bool ingress, __u8* eth, struct iphdr* ip){
 	sfunnel_ip4_rule_t* rule;
 	struct tcphdr* tcp = NULL;
 	struct udphdr* udp = NULL;
@@ -306,16 +338,58 @@ static inline int proc_ip4(struct __sk_buff* skb, __u8* eth, struct iphdr* ip){
 		return TC_ACT_UNSPEC;
 	}
 
-	PRINTK("[%p] Looking up IP4/%s, size %d", skb,
+	if(skb->mark&PKT_REDIR){
+		//INGRESS traffic needs to be processed in seg_pair
+		//EGRESS traffic is hairpinned and will be processed by the
+		//egress iface
+		if(skb->mark&PKT_REDIR_EGRESS &&
+		   skb->ifindex == SEG_PAIR_DEV_IFINDEX){
+			PRINTK("[%d:0x%p] Skipping redirected pkt coming from EGRESS program",
+							skb->ifindex, skb);
+			return TC_ACT_UNSPEC;
+		}
+
+		if(skb->gso_size > 0){
+			//The packet has been redirected before, but is looped
+			//back GSOed => drop (bug)
+			PRINTK("[%d:0x%p] Redirected pkt is still GSOed",
+							skb->ifindex, skb);
+			return TC_ACT_SHOT;
+		}
+
+		PRINTK("[%d:0x%p] Processing redirected pkt from %s, mark: 0x%x",
+			skb->ifindex,
+			skb,
+			skb->mark&PKT_REDIR_EGRESS? "EGRESS" : "INGRESS",
+			skb->mark);
+
+		//Packet has been ungsoed. Recover cached lookup
+		__u16 index = skb->mark&0xFFFF;
+		if(index >= IP4_RULES_SIZE){
+			PRINTK("[%d:0x%p] Invalid rule num %d", skb->ifindex,
+								skb, index);
+			return TC_ACT_SHOT;
+		}
+		rule = &ip4_rules[index];
+		skb->mark &= ~(0xFFFF | PKT_REDIR);
+
+		PRINTK("[%d:0x%p] Cached matched rule#%u %s", skb->ifindex, skb,
+								rule->id);
+	}else{
+		PRINTK("[%d:0x%p] Looking up IP4/%s, size %d", skb->ifindex, skb,
 						(ip->protocol == IPPROTO_UDP)?
 							"UDP" : "TCP",
 						skb->len);
-	rule = ip4_rule_lookup(skb, ip, tcp, udp);
-	if(!rule || rule >= ip4_rules+sizeof(ip4_rules)){
-		PRINTK("[%p] No match", skb);
-		return TC_ACT_UNSPEC;
+		rule = ip4_rule_lookup(skb, ip, tcp, udp);
+		if(!rule || rule >= ip4_rules+sizeof(ip4_rules)){
+			PRINTK("[%d:0x%p] No match", skb->ifindex, skb);
+			return TC_ACT_UNSPEC;
+		}
+
+		PRINTK("[%d:0x%p] Matched rule#%u", skb->ifindex, skb, rule->id);
+		if(SEG_DEV_IFINDEX > 0)
+			return redirect_seg_pkt(skb, ingress, rule->id);
 	}
-	PRINTK("[%p] Matched rule#%u", skb, rule->id);
 
 	//Direct actions
 	if(rule->actions.drop.execute){
@@ -335,23 +409,20 @@ static inline int proc_ip4(struct __sk_buff* skb, __u8* eth, struct iphdr* ip){
 		return ip4_unfunnel(skb, ip, proto);
 	}
 
-	//DNAT
-	//TODO
-
 	return TC_ACT_UNSPEC;
 }
 
-SEC("funnel")
+SEC("classifier")
 int tc_sfunnel(struct __sk_buff *skb){
 	struct ethhdr *eth = (void *)(unsigned long long)skb->data;
 	CHECK_SKB_PTR(skb, eth+1);
 
 	if(eth->h_proto == bpf_htons(ETH_P_IP)){
 		struct iphdr* ip = (struct iphdr*)((__u8*)eth+sizeof(struct ethhdr));
-		return proc_ip4(skb, (__u8*)eth, ip);
+		return proc_ip4(skb, INGRESS, (__u8*)eth, ip);
 	}else if(eth->h_proto == bpf_htons(ETH_P_IPV6)){
 		//XXX
-		PRINTK("IPv6 packet with length: %d NOT SUPPORTED!\n", skb->len);
+		//PRINTK("IPv6 packet with length: %d NOT SUPPORTED!\n", skb->len);
 	}
 
 	return TC_ACT_UNSPEC;

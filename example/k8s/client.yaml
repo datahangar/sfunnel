@@ -76,7 +76,7 @@ spec:
             - name: SFUNNEL_RULESET
               value: ip tcp sport 80 dport 540 actions unfunnel tcp
           securityContext:
-            privileged: false #Set to true for some public clouds (e.g. GKE standard)
+            privileged: true
             capabilities:
                add: [BPF, NET_ADMIN, SYS_ADMIN]
           volumeMounts:
@@ -91,7 +91,7 @@ spec:
             - name: SFUNNEL_RULESET
               value: ip tcp dport 8080 actions funnel tcp dport 80 sport 540
           securityContext:
-            privileged: false #Set to true for some public clouds (e.g. GKE standard)
+            privileged: true
             capabilities:
                add: [BPF, NET_ADMIN, SYS_ADMIN]
           volumeMounts:
