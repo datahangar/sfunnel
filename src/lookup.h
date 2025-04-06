@@ -36,10 +36,10 @@ sfunnel_ip4_rule_t* ip4_rule_lookup(struct __sk_buff* skb, struct iphdr* ip,
 
 	sfunnel_ip4_rule_t* r;
 	struct sfunnel_ip4_matches* m;
+	__u16 l3_size = ip->ihl * 4;
 
 	//Linear lookup
-	__u32 n_rules = sizeof(ip4_rules)/sizeof(*r);
-	for(__u32 i=0; i < n_rules; ++i){
+	for(__u32 i=0; i<IP4_RULES_SIZE; ++i){
 		r = &ip4_rules[i];
 		m = &r->matches;
 
@@ -50,13 +50,6 @@ sfunnel_ip4_rule_t* ip4_rule_lookup(struct __sk_buff* skb, struct iphdr* ip,
 
 		if(m->proto && ip->protocol != m->proto)
 			continue;
-
-		//We seem to have to reeval ip, tcp, udp...
-		//Verifier bug (?)
-		ip = (struct iphdr*)((__u8*)SKB_GET_ETH(skb) +
-							sizeof(struct ethhdr));
-		CHECK_SKB_PTR_VAL(skb, ip+1, NULL);
-		__u16 l3_size = ip->ihl * 4;
 
 		if(ip->protocol == IPPROTO_TCP){
 			tcp = (struct tcphdr*)((__u8*)ip+l3_size);
