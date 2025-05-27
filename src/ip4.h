@@ -295,11 +295,13 @@ int ip4_unfunnel(struct __sk_buff* skb, struct iphdr* ip, const __u8 proto){
 
 static inline
 int proc_ip4(struct __sk_buff* skb, bool ingress, __u8* eth, struct iphdr* ip){
+	int rc = TC_ACT_UNSPEC;
 	sfunnel_ip4_rule_t* rule = NULL;
 	struct tcphdr* tcp = NULL;
 	struct udphdr* udp = NULL;
 	void* l4;
 	sfunnel_action_funnel_params_t* funn_p;
+	__u16 r_index = 0; //Keep in main scope, else verifier throws error
 
 	CHECK_SKB_PTR(skb, ip+1);
 	if(ip->protocol == IPPROTO_UDP){
@@ -312,15 +314,8 @@ int proc_ip4(struct __sk_buff* skb, bool ingress, __u8* eth, struct iphdr* ip){
 		return TC_ACT_UNSPEC;
 	}
 
+	//See gso.h for details on the packet flow
 	if(skb->mark&PKT_REDIR){
-		//See gso.h for details on the packet flow
-		if(skb->mark&PKT_REDIR_EGRESS &&
-		   skb->ifindex == SEG_PAIR_DEV_IFINDEX){
-			PRINTK("[%d:0x%p] Skipping redirected pkt coming from EGRESS program",
-							skb->ifindex, skb);
-			return TC_ACT_UNSPEC;
-		}
-
 		if(skb->gso_size > 0){
 			//The packet has been redirected before, but is looped
 			//back GSOed => drop (bug)
@@ -329,21 +324,27 @@ int proc_ip4(struct __sk_buff* skb, bool ingress, __u8* eth, struct iphdr* ip){
 			return TC_ACT_SHOT;
 		}
 
+		//Egress packet has been ungsoed, so:
+		// - check for mtu _and_
+		// - reinject back to the egress
+		if(skb->mark&PKT_REDIR_EGRESS)
+			return gso_reinject_egress_pkt(skb, ip);
+
 		PRINTK("[%d:0x%p] Processing redirected pkt from %s, mark: 0x%x",
 			skb->ifindex,
 			skb,
-			skb->mark&PKT_REDIR_EGRESS? "EGRESS" : "INGRESS",
+			skb->mark&PKT_REDIR_INGRESS? "INGRESS" : "EGRESS",
 			skb->mark);
 
 		//Packet has been ungsoed. Recover cached lookup
-		__u16 index = skb->mark&0xFFFF;
-		if(index >= IP4_RULES_SIZE){
+		r_index = skb->mark&0xFFFF;
+
+		if(r_index >= IP4_RULES_SIZE){
 			PRINTK("[%d:0x%p] Invalid rule num %d", skb->ifindex,
-								skb, index);
+								skb, r_index);
 			return TC_ACT_SHOT;
 		}
-		rule = &ip4_rules[index];
-		skb->mark &= ~(0xFFFF | PKT_REDIR);
+		rule = &ip4_rules[r_index];
 
 		PRINTK("[%d:0x%p] Cached matched rule#%u %s", skb->ifindex, skb,
 								rule->id);
@@ -359,29 +360,31 @@ int proc_ip4(struct __sk_buff* skb, bool ingress, __u8* eth, struct iphdr* ip){
 		}
 
 		PRINTK("[%d:0x%p] Matched rule#%u", skb->ifindex, skb, rule->id);
+
 		if(SEG_DEV_IFINDEX > 0)
-			return redirect_seg_pkt(skb, ingress, rule->id);
+			return gso_redirect_seg_pkt(skb, ingress, rule);
 	}
 
 	//Direct actions
 	if(rule->actions.drop.execute){
 		return TC_ACT_SHOT;
 	}else if(rule->actions.accept.execute){
-		return TC_ACT_OK;
+		rc = TC_ACT_OK;
 	}
 
 	//Funnel or unfunnel
 	if(rule->actions.funnel.execute){
 		funn_p = &rule->actions.funnel.p.funnel;
-		return ip4_funnel(skb, eth, ip, l4, funn_p->funn_proto,
+		rc = ip4_funnel(skb, eth, ip, l4, funn_p->funn_proto,
 						funn_p->sport,
 						funn_p->dport);
 	}else if(rule->actions.unfunnel.execute){
 		__be16 proto = rule->actions.unfunnel.p.unfunnel.proto;
-		return ip4_unfunnel(skb, ip, proto);
+		rc = ip4_unfunnel(skb, ip, proto);
 	}
 
-	return TC_ACT_UNSPEC;
+	skb->mark &= ~(0xFFFF | PKT_REDIR);
+	return rc;
 }
 
 #endif //SFUNNEL_IP4

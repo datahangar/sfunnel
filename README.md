@@ -147,6 +147,7 @@ environments, please reach out so that we can update this list.
 
 * [eBPF](https://ebpf.io/)-enabled kernel, with support for `clsact` and `direct-action`.
 * Proper [MTU configuration](docs/funneling.md#mtu) (20 bytes for TCP, 8 for UDP).
+* Linux kernel 5.12 or above (`struct bpf_fib_lookup` `mtu_result` field).
 * In Kubernetes:
   * Privileged init container (`CAP_BPF`, `CAP_NET_ADMIN`, `CAP_SYS_ADMIN`)
     * In some cloud providers (E.g. Google Cloud) `privileged=true` is required.

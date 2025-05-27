@@ -36,6 +36,10 @@ IFACES=${IFACES:-$_IFACES}
 NETNS=${NETNS:-}
 
 
+__NS_PID=$(readlink /proc/self/ns/pid | sed -n 's/.*\[\([0-9]*\)\]/\1/p' | tr -d ' ')
+PMTUD_MAP_NAME=sfunnel_pmtud_${__NS_PID}
+PMTUD_MAP_N_ENTRIES=${PMTUD_MAP_N_ENTRIES:-2048}
+
 SRC_DIR=/opt/sfunnel/src
 PROG_DIR=/opt/sfunnel/bin
 PROG_INGRESS=${PROG_DIR}/tc_sfunnel_ingress.o
@@ -47,7 +51,7 @@ compile(){
 	mkdir -p ${PROG_DIR}
 
 	for INGRESS in 0 1; do
-		INGRESS=${INGRESS} SEG_DEV_IFINDEX=${SEG_DEV_IFINDEX} SEG_PAIR_DEV_IFINDEX=${SEG_PAIR_DEV_IFINDEX} SEG_PAIR_DEV_MAC="${SEG_PAIR_DEV_MAC}" DEBUG=${DEBUG} FILE=/etc/sfunnel/ruleset make
+		INGRESS=${INGRESS} SEG_DEV_IFINDEX=${SEG_DEV_IFINDEX} SEG_PAIR_DEV_IFINDEX=${SEG_PAIR_DEV_IFINDEX} SEG_PAIR_DEV_MAC="${SEG_PAIR_DEV_MAC}" PMTUD_MAP_NAME=${PMTUD_MAP_NAME} PMTUD_MAP_N_ENTRIES=${PMTUD_MAP_N_ENTRIES} DEBUG=${DEBUG} FILE=/etc/sfunnel/ruleset make
 		if [ "$INGRESS" -eq 1 ]; then
 			mv ${SRC_DIR}/tc_sfunnel.o ${PROG_INGRESS}
 		else
@@ -105,6 +109,8 @@ echo "  \$DIRECTION='${DIRECTION}'"
 echo "  \$DEBUG='${DEBUG}'"
 echo "  \$NETNS='${NETNS}'"
 echo "  \$N_ATTEMPTS='${N_ATTEMPTS}'"
+echo "  \$PMTUD_MAP_NAME='${PMTUD_MAP_NAME}'"
+echo "  \$PMTUD_MAP_N_ENTRIES='${PMTUD_MAP_N_ENTRIES}'"
 echo "  \$RETRY_DELAY='${RETRY_DELAY}'"
 echo "  \$SEG_DEV_NAME='${SEG_DEV_NAME}'"
 echo "[INFO] Container info:"

@@ -8,6 +8,7 @@ WORKDIR /
 
 #First install deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    libc6-dev \
     make \
     clang \
     libbpf-dev \
@@ -16,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     python3 \
     jq \
+    bpftool \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 #Copy sfunnel stuff

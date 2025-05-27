@@ -1,0 +1,254 @@
+#ifndef SFUNNEL_PMTUD_H
+#define SFUNNEL_PMTUD_H
+
+/* XXX Ugly hack to avoid including if.h */
+#define _LINUX_IF_H
+#ifndef IFNAMSIZ
+	#define IFNAMSIZ 16
+#endif //IFNAMSIZ
+#include <linux/icmp.h>
+#undef _LINUX_IF_H
+
+#include "common.h"
+
+#define IP_DF 0x4000
+
+typedef struct pmtud_pkt {
+	struct iphdr ip;
+	struct icmphdr icmp;
+}pmtud_pkt_t;
+
+typedef struct __attribute__((packed)) pmtud_flow_hash{
+	__be32 saddr;
+	__be32 daddr;
+	__u8 proto;
+	__be16 sport;
+	__be16 dport;
+	__u8 zero[3];
+}pmtud_flow_hash_t;
+
+COMPILATION_ASSERT(sizeof(pmtud_flow_hash_t) == 16,
+		   "Size of pmtud_flow_hash_t must be 16!");
+
+typedef struct __attribute__((packed)) pmtud_flow_state{
+	__u16 last_seen_net_mtu;
+	__u16 adjusted_mtu;
+}pmtud_flow_state_t;
+COMPILATION_ASSERT(sizeof(pmtud_flow_state_t) == 4,
+		   "Size of pmtud_flow_state_t must be 4!");
+
+/**
+* PMTUD map
+*/
+struct{
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, PMTUD_MAP_N_ENTRIES);
+    __type(key, pmtud_flow_state_t);
+    __type(value, pmtud_flow_state_t);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} PMTUD_MAP_NAME SEC(".maps");
+
+#define pmtud_map PMTUD_MAP_NAME
+
+static inline
+int pmtud_ip4_gen_frag_needed(struct __sk_buff* skb, struct iphdr* ip,
+			      const __u32 usable_mtu, const __be32 icmp_saddr){
+	int rc;
+	struct iphdr old_ip;
+	struct ethhdr *eth;
+	pmtud_pkt_t hdrs, *ip_icmp;
+	__s64 ip_csum, icmp_csum;
+	struct pseudo_header pseudo;
+	__u16 tot_len = bpf_ntohs(ip->tot_len);
+
+	//Prepare the IP hdr (outer)
+	hdrs.ip.version = 4;
+	hdrs.ip.ihl = 5;
+	hdrs.ip.tos = 0x0;
+	hdrs.ip.tot_len = bpf_htons(sizeof(pmtud_pkt_t) + 64);
+	hdrs.ip.id = ip->id;
+	hdrs.ip.frag_off = 0x0;
+	hdrs.ip.ttl = 64;
+	hdrs.ip.protocol = IPPROTO_ICMP;
+	hdrs.ip.daddr = ip->saddr;
+	hdrs.ip.saddr = icmp_saddr;
+	hdrs.ip.check = 0x0;
+
+	hdrs.icmp.type = ICMP_DEST_UNREACH;
+	hdrs.icmp.code = ICMP_FRAG_NEEDED;
+	hdrs.icmp.checksum = 0x0;
+	hdrs.icmp.un.frag.__unused = 0x0;
+	hdrs.icmp.un.frag.mtu = bpf_htons(usable_mtu);
+
+	//Inner, as push will happen between l3 and l4
+	old_ip = *ip;
+
+	if(tot_len < 64){
+		PRINTK("[%d:0x%p][pmtud] Buggy packet of len: %d, less than 64 byte supposed to trigger frag. needed!",
+						skb->ifindex, skb,
+						skb->len);
+		return TC_ACT_SHOT;
+
+	}
+
+    	//Limit payload to 64 bytes
+	rc = bpf_skb_change_tail(skb, sizeof(*eth) + sizeof(hdrs) + 64, 0x0);
+	if(rc < 0){
+		PRINTK("[%d:0x%p][pmtud] Unable to trim skb (len: %d). rc=%d",
+						skb->ifindex, skb,
+						skb->len, rc);
+		return TC_ACT_SHOT;
+	}
+
+	//Make room for outer IP + ICMP + MTU
+	rc = bpf_skb_adjust_room(skb, sizeof(pmtud_pkt_t), BPF_ADJ_ROOM_NET, 0);
+	if(rc < 0){
+		PRINTK("[%d:0x%p][pmtud] Unable to adjust_room for pmtud hdr +%d (IP+ICMPv4+opt). rc=%d",
+							skb->ifindex, skb,
+							sizeof(pmtud_pkt_t),
+							rc);
+        	return TC_ACT_SHOT;
+	}
+
+	eth = (void *)(unsigned long long)skb->data;
+	CHECK_SKB_PTR(skb, eth+1);
+	ip_icmp = (pmtud_pkt_t*)(eth+1);
+	CHECK_SKB_PTR(skb, ip_icmp+1);
+	*ip_icmp = hdrs;
+	ip = (struct iphdr*)(ip_icmp+1);
+	CHECK_SKB_PTR(skb, ip+1);
+	*ip = old_ip;
+
+	ip_csum = bpf_csum_diff(NULL, 0, (__be32*)&hdrs.ip, sizeof(hdrs.ip), 0);
+	pseudo.dst = hdrs.ip.daddr;
+	pseudo.src = hdrs.ip.saddr;
+	pseudo.res = 0x0;
+	pseudo.proto = IPPROTO_ICMP;
+	pseudo.len = bpf_htons(sizeof(hdrs.icmp) + 64);
+	icmp_csum = bpf_csum_diff(NULL, 0, (__be32*)&pseudo, sizeof(pseudo), 0);
+
+	CHECK_SKB_PTR(skb, ((__u8*)(ip_icmp+1)) + 64);
+	icmp_csum = bpf_csum_diff(NULL, 0, (__be32*)&ip_icmp->icmp,
+				  sizeof(hdrs) - sizeof(hdrs.ip) + 64,
+				  icmp_csum);
+
+	__u32 l3_off = (__u8*)&ip_icmp->ip - (__u8*)SKB_GET_ETH(skb);
+	__u32 l4_off = l3_off + sizeof(hdrs.ip);
+
+	rc = bpf_l3_csum_replace(skb, l3_off + offsetof(struct iphdr, check), 0,
+				 ip_csum, 0);
+	if(rc < 0){
+		PRINTK("[%d:0x%p][pmtud] Unable to set L3 csum. rc=%d",
+							skb->ifindex, skb,
+							rc);
+        	return TC_ACT_SHOT;
+	}
+
+	rc = bpf_l4_csum_replace(skb, l4_off + offsetof(struct icmphdr, checksum),
+				 0, icmp_csum, 0);
+	if(rc < 0){
+		PRINTK("[%d:0x%p][pmtud] Unable to set L4 csum. rc=%d",
+							skb->ifindex, skb,
+							rc);
+        	return TC_ACT_SHOT;
+	}
+
+	//Packet has been mangled, mark it as such
+	bpf_set_hash_invalid(skb);
+
+	//Use TC_ACT_UNSPEC as rc to indicate ingress via SEG_PAIR
+	//Will be later translated to TC_ACT_OK
+	return TC_ACT_UNSPEC;
+}
+
+static inline
+bool pmtud_ip4_check(struct __sk_buff* skb, struct iphdr* ip,
+		     const struct bpf_fib_lookup* fib_params){
+	__u16 len = bpf_ntohs(ip->tot_len);
+	__u16 usable_mtu = fib_params->mtu_result;
+
+	if(!(ip->frag_off & bpf_htons(IP_DF)))
+		return TC_ACT_OK;
+
+	//Calculate the usable MTU against effective MTU to dest post funneling
+	//(assuming it hasn't been adjusted before)
+	if(skb->mark&PKT_PUSH_TCP){
+		usable_mtu -= sizeof(struct tcphdr);
+	}else if(skb->mark&PKT_PUSH_UDP){
+		usable_mtu -= sizeof(struct udphdr);
+	}
+
+	if(len < usable_mtu)
+		return TC_ACT_OK;
+
+	pmtud_flow_hash_t hash = {0};
+	pmtud_flow_state_t* state = NULL;
+	hash.daddr = ip->daddr;
+	hash.saddr = ip->saddr;
+	hash.proto = ip->protocol;
+	if(hash.proto == IPPROTO_TCP){
+		struct tcphdr *tcp = (struct tcphdr*)(ip+1);
+		CHECK_SKB_PTR(skb, tcp+1);
+		hash.dport = tcp->dest;
+		hash.sport = tcp->source;
+	}else if(hash.proto == IPPROTO_UDP){
+		struct udphdr *udp = (struct udphdr*)(ip+1);
+		CHECK_SKB_PTR(skb, udp+1);
+		hash.dport = udp->dest;
+		hash.sport = udp->source;
+	}else{
+		PRINTK("[%d:0x%p][pmtud] Buggy protocol %d", skb->ifindex, skb,
+								hash.proto);
+		return false;
+	}
+
+	PRINTK("[%d:0x%p][pmtud] Looking for flow: ", skb->ifindex, skb);
+	PRINTK("{ saddr: 0x%x, daddr: 0x%x, protocol: %d" ,
+						bpf_htonl(hash.saddr),
+						bpf_htonl(hash.daddr),
+						hash.proto);
+	PRINTK("  sport: %d, dport: %d }" , bpf_htons(hash.sport),
+						bpf_htons(hash.dport));
+
+	state = bpf_map_lookup_elem(&pmtud_map, &hash);
+	if(state){
+		//Already adjusted and pkt within bounds we are done!
+		if(len <= state->adjusted_mtu)
+			return TC_ACT_OK;
+
+		//TODO: intercept network ICMP PMTUD pkts and adjust state
+		if(fib_params->mtu_result != state->adjusted_mtu &&
+			fib_params->mtu_result != state->last_seen_net_mtu){
+			PRINTK("[%d:0x%p][pmtud] Invalid PMTUD state effective mtu: %d, last adjusted: %d",
+					skb->ifindex, skb,
+					fib_params->mtu_result,
+					state->adjusted_mtu);
+			return TC_ACT_SHOT;
+		}
+
+		//We sent PMTUD but apparently was not received / processed
+		//Do it again
+		goto SEND_ICMP;
+	}
+
+	PRINTK("[%d:0x%p][pmtud] Adjusting MTU. Discovered mtu to destination: %d, usuable mtu (after push): %d. Generating icmp frag. needed.",
+					skb->ifindex, skb,
+					fib_params->mtu_result,
+					usable_mtu);
+
+	pmtud_flow_state_t new_state = {
+			.last_seen_net_mtu = fib_params->mtu_result,
+			.adjusted_mtu = usable_mtu
+	};
+	int rc = bpf_map_update_elem(&pmtud_map, &hash, &new_state, BPF_ANY);
+	if(rc < 0){
+		PRINTK("[%d:0x%p][pmtud] Unable to create flow state rc=%d",
+						skb->ifindex, skb, rc);
+	}
+
+SEND_ICMP:
+	return pmtud_ip4_gen_frag_needed(skb, ip, usable_mtu,
+					 fib_params->ipv4_src);
+}
+
+#endif //SFUNNEL_PMTUD

@@ -12,6 +12,10 @@
 
 #define COMPILATION_ASSERT(COND, MSG) _Static_assert(COND, MSG)
 
+//Constants
+#define AF_INET   2
+#define AF_INET6 10
+
 #define SKB_GET_ETH( SKB ) (struct ethhdr*)(unsigned long long)skb->data
 
 
@@ -112,9 +116,13 @@ typedef struct sfunnel_ip4_rule {
 #if INGRESS != 1 && INGRESS != 0
 	#error INGRESS has to be either 1 or 0
 #endif
-#define PKT_REDIR_INGRESS (1UL << 16)
-#define PKT_REDIR_EGRESS  (1UL << 17)
-#define PKT_REDIR ( PKT_REDIR_INGRESS | PKT_REDIR_EGRESS )
+#define PKT_REDIR_INGRESS      (1UL << 16)
+#define PKT_REDIR_EGRESS       (1UL << 17)
+#define PKT_REDIR_EGR_BACK     (1UL << 18)
+#define PKT_PUSH_TCP           (1UL << 19)
+#define PKT_PUSH_UDP           (1UL << 20)
+
+#define PKT_REDIR (PKT_REDIR_INGRESS | PKT_REDIR_EGRESS | PKT_REDIR_EGR_BACK)
 #define IP4_RULES_SIZE    (sizeof(ip4_rules) / sizeof(ip4_rules[0]))
 
 #include "ruleset.h"
