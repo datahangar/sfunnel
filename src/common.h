@@ -10,6 +10,8 @@
 	#define PRINTK(...)
 #endif
 
+#define COMPILATION_ASSERT(COND, MSG) _Static_assert(COND, MSG)
+
 #define SKB_GET_ETH( SKB ) (struct ethhdr*)(unsigned long long)skb->data
 
 

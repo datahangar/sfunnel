@@ -5,7 +5,7 @@ SEG_DEV_IFINDEX ?= 0
 SEG_PAIR_DEV_IFINDEX ?= 0
 SEG_PAIR_DEV_MAC ?= 0x00,0x00,0x00,0x00,0x00,0x00
 FILE ?= ruleset.default
-CFLAGS = -O2 -Wall -Werror -g
+CFLAGS = -O2 -Wall -Werror --std=gnu99 -g
 ifeq ($(DEBUG), 1)
     CFLAGS += -DDEBUG=1
 endif
