@@ -296,11 +296,11 @@ int ip4_unfunnel(struct __sk_buff* skb, struct iphdr* ip, const __u8 proto){
 static inline
 int proc_ip4(struct __sk_buff* skb, bool ingress, __u8* eth, struct iphdr* ip){
 	int rc = TC_ACT_UNSPEC;
-	sfunnel_ip4_rule_t* rule = NULL;
+	const sfunnel_ip4_rule_t* rule = NULL;
 	struct tcphdr* tcp = NULL;
 	struct udphdr* udp = NULL;
 	void* l4;
-	sfunnel_action_funnel_params_t* funn_p;
+	const sfunnel_action_funnel_params_t* funn_p;
 	__u16 r_index = 0; //Keep in main scope, else verifier throws error
 
 	CHECK_SKB_PTR(skb, ip+1);
@@ -349,18 +349,20 @@ int proc_ip4(struct __sk_buff* skb, bool ingress, __u8* eth, struct iphdr* ip){
 		PRINTK("[%d:0x%p] Cached matched rule#%u %s", skb->ifindex, skb,
 								rule->id);
 	}else{
-		PRINTK("[%d:0x%p] Looking up IP4/%s, size %d", skb->ifindex, skb,
+		PRINTK("[%d:0x%p] Looking up IP4/%s, size %d", skb->ifindex,
+						skb,
 						(ip->protocol == IPPROTO_UDP)?
 							"UDP" : "TCP",
 						skb->len);
 		rule = ip4_rule_lookup(skb, ip, tcp, udp);
-		if(!rule || rule >= ip4_rules+sizeof(ip4_rules)){
+		if(!rule || rule >= ip4_rules+IP4_RULES_SIZE){
 			PRINTK("[%d:0x%p] No match", skb->ifindex, skb);
 			return TC_ACT_UNSPEC;
 		}
 
 		PRINTK("[%d:0x%p] Matched rule#%u", skb->ifindex, skb, rule->id);
 
+		//Unsegment skb
 		if(SEG_DEV_IFINDEX > 0)
 			return gso_redirect_seg_pkt(skb, ingress, rule);
 	}

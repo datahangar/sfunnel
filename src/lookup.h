@@ -4,17 +4,17 @@
 #include "common.h"
 
 static __always_inline
-__u8 match_addr(sfunnel_ip4_addr_match_t* m, __be32 ip){
+__u8 match_addr(const sfunnel_ip4_addr_match_t* m, __be32 ip){
 	return ((ip&m->mask) == (m->addr&m->mask)) != m->negate;
 }
 
 static __always_inline
-bool match_port(sfunnel_l4_port_match_t* m, __be16 port){
+bool match_port(const sfunnel_l4_port_match_t* m, __be16 port){
 	return !m->port || ((port == m->port) != m->negate);
 }
 
 static __always_inline
-bool rule_check_tcp(struct __sk_buff* skb, struct sfunnel_ip4_matches* m,
+bool rule_check_tcp(struct __sk_buff* skb, const struct sfunnel_ip4_matches* m,
 							struct iphdr* ip,
 							struct tcphdr* tcp){
 	return match_port(&m->sport, tcp->source) &&
@@ -22,7 +22,7 @@ bool rule_check_tcp(struct __sk_buff* skb, struct sfunnel_ip4_matches* m,
 }
 
 static __always_inline
-bool rule_check_udp(struct __sk_buff* skb, struct sfunnel_ip4_matches* m,
+bool rule_check_udp(struct __sk_buff* skb, const struct sfunnel_ip4_matches* m,
 							struct iphdr* ip,
 							struct udphdr* udp){
 	return match_port(&m->sport, udp->source) &&
@@ -30,12 +30,13 @@ bool rule_check_udp(struct __sk_buff* skb, struct sfunnel_ip4_matches* m,
 }
 
 static __always_inline
-sfunnel_ip4_rule_t* ip4_rule_lookup(struct __sk_buff* skb, struct iphdr* ip,
+const sfunnel_ip4_rule_t* ip4_rule_lookup(struct __sk_buff* skb,
+							struct iphdr* ip,
 							struct tcphdr* tcp,
 							struct udphdr* udp){
 
-	sfunnel_ip4_rule_t* r;
-	struct sfunnel_ip4_matches* m;
+	const sfunnel_ip4_rule_t* r;
+	const struct sfunnel_ip4_matches* m;
 	__u16 l3_size = ip->ihl * 4;
 
 	//Linear lookup

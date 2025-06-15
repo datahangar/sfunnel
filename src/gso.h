@@ -91,7 +91,7 @@
 */
 static inline
 int gso_redirect_seg_pkt(struct __sk_buff* skb, bool ingress,
-			 sfunnel_ip4_rule_t* rule){
+			 const sfunnel_ip4_rule_t* rule){
 	//Redirecting all pkts, incl. non GSOed, to avoid reorderings.
 	__u8 _seg_mac[ETH_ALEN] = {SEG_PAIR_DEV_MAC};
 	bpf_skb_store_bytes(skb, offsetof(struct ethhdr, h_dest),

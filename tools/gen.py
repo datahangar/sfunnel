@@ -253,7 +253,7 @@ def gen_header(rules_str: str, rules: list):
     s += f"{rules_str}"
     s += f"*/\n\n"
 
-    s += "struct sfunnel_ip4_rule ip4_rules[] = {\n"
+    s += "static const struct sfunnel_ip4_rule ip4_rules[] = {\n"
     for index, rule in enumerate(rules):
         s += f"{INDENT}{{\n"
         s += f'{2*INDENT}//{rule["__line__"]}\n'
