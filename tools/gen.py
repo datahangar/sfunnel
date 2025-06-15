@@ -46,23 +46,23 @@ import socket
 #
 
 INDENT="  "
-param_re="(\S+)"
-neg_re="(!\s*=)?"
+param_re="(\\S+)"
+neg_re="(!\\s*=)?"
 
 match_patterns = [
     "(ip)",
-    f"(saddr)\s*{neg_re}\s*{param_re}",
-    f"(daddr)\s*{neg_re}\s*{param_re}",
+    f"(saddr)\\s*{neg_re}\\s*{param_re}",
+    f"(daddr)\\s*{neg_re}\\s*{param_re}",
     "(tcp)",
     "(udp)",
-    f"(sport)\s*{neg_re}\s*{param_re}",
-    f"(dport)\s*{neg_re}\s*{param_re}"
+    f"(sport)\\s*{neg_re}\\s*{param_re}",
+    f"(dport)\\s*{neg_re}\\s*{param_re}"
 ]
 
 action_patterns = [
-    f"(funnel)\s*{param_re}\s*(sport|dport)\s*{param_re}\s*(sport|dport)\s*{param_re}",
-    f"(unfunnel)\s*{param_re}",
-    f"(dnat)\s*{param_re}",
+    f"(funnel)\\s*{param_re}\\s*(sport|dport)\\s*{param_re}\\s*(sport|dport)\\s*{param_re}",
+    f"(unfunnel)\\s*{param_re}",
+    f"(dnat)\\s*{param_re}",
     f"(accept)",
     f"(drop)"
 ]

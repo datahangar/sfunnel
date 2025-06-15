@@ -7,7 +7,7 @@ ifeq ($(DEBUG), 1)
 endif
 
 compile:
-	python3 ../tools/gen.py $(FILE) > ruleset.h
+	python3 -Werror ../tools/gen.py $(FILE) > ruleset.h
 	clang $(CFLAGS) -target bpf -c sfunnel.c -o tc_sfunnel.o
 
 clean:
