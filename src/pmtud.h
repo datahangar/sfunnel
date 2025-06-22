@@ -50,7 +50,7 @@ struct{
 
 #define pmtud_map PMTUD_MAP_NAME
 
-static inline
+static __always_inline
 int pmtud_ip4_gen_frag_needed(struct __sk_buff* skb, struct iphdr* ip,
 			      const __u32 usable_mtu, const __be32 icmp_saddr){
 	int rc;
@@ -161,7 +161,7 @@ int pmtud_ip4_gen_frag_needed(struct __sk_buff* skb, struct iphdr* ip,
 	return TC_ACT_UNSPEC;
 }
 
-static inline
+static __always_inline
 bool pmtud_ip4_check(struct __sk_buff* skb, struct iphdr* ip,
 		     const struct bpf_fib_lookup* fib_params){
 	__u16 len = bpf_ntohs(ip->tot_len);

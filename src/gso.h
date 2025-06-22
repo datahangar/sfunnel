@@ -89,7 +89,7 @@
 * Redirect all packets, incl. non GSOed (to avoid reorderings) to
 * SEG_PAIR_DEV_MAC, to ungso.
 */
-static inline
+static __always_inline
 int gso_redirect_seg_pkt(struct __sk_buff* skb, bool ingress,
 			 const sfunnel_ip4_rule_t* rule){
 	//Redirecting all pkts, incl. non GSOed, to avoid reorderings.
@@ -114,7 +114,7 @@ int gso_redirect_seg_pkt(struct __sk_buff* skb, bool ingress,
 /**
 * Reinjects packet to the original egress iface after ungsoed
 */
-static inline
+static __always_inline
 int gso_reinject_egress_pkt(struct __sk_buff* skb, struct iphdr* ip){
 	int rc;
 	struct bpf_fib_lookup fib_params = {0};

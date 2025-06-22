@@ -293,7 +293,7 @@ int ip4_unfunnel(struct __sk_buff* skb, struct iphdr* ip, const __u8 proto){
 	return TC_ACT_OK;
 }
 
-static inline
+static __always_inline
 int proc_ip4(struct __sk_buff* skb, bool ingress, __u8* eth, struct iphdr* ip){
 	int rc = TC_ACT_UNSPEC;
 	const sfunnel_ip4_rule_t* rule = NULL;

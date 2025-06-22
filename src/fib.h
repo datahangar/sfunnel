@@ -3,7 +3,7 @@
 
 #include "common.h"
 
-static inline
+static __always_inline
 int fib_ip4_lookup(struct __sk_buff* skb, struct bpf_fib_lookup* fib_params,
 		   struct iphdr* ip){
 	int rc;
