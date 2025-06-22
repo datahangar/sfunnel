@@ -349,12 +349,29 @@ int proc_ip4(struct __sk_buff* skb, bool ingress, __u8* eth, struct iphdr* ip){
 		PRINTK("[%d:0x%p] Cached matched rule#%u %s", skb->ifindex, skb,
 								rule->id);
 	}else{
+		pkt_hdrs_t hdrs;
+		hdrs.saddr = ip->saddr;
+		hdrs.daddr = ip->daddr;
+		hdrs.proto = ip->protocol;
+
+		if(ip->protocol == IPPROTO_UDP){
+			CHECK_SKB_PTR(skb, udp+1);
+			hdrs.sport = udp->source;
+			hdrs.dport = udp->dest;
+		}else if(ip->protocol == IPPROTO_TCP){
+			CHECK_SKB_PTR(skb, tcp+1);
+			hdrs.sport = tcp->source;
+			hdrs.dport = tcp->dest;
+		}else{
+			//Can never happen, but make verifier happy.
+			hdrs.sport = hdrs.dport = 0x0;
+		}
 		PRINTK("[%d:0x%p] Looking up IP4/%s, size %d", skb->ifindex,
 						skb,
 						(ip->protocol == IPPROTO_UDP)?
 							"UDP" : "TCP",
 						skb->len);
-		rule = ip4_rule_lookup(skb, ip, tcp, udp);
+		rule = ip4_rule_lookup(&hdrs);
 		if(!rule || rule >= ip4_rules+IP4_RULES_SIZE){
 			PRINTK("[%d:0x%p] No match", skb->ifindex, skb);
 			return TC_ACT_UNSPEC;
