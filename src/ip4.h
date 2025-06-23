@@ -330,7 +330,7 @@ int proc_ip4(struct __sk_buff* skb, bool ingress, __u8* eth, struct iphdr* ip){
 		if(skb->mark&PKT_REDIR_EGRESS)
 			return gso_reinject_egress_pkt(skb, ip);
 
-		PRINTK("[%d:0x%p] Processing redirected pkt from %s, mark: 0x%x",
+		PRINTK("[%d:0x%p][" DIR_STR "] Processing redirected pkt from %s, mark: 0x%08x",
 			skb->ifindex,
 			skb,
 			skb->mark&PKT_REDIR_INGRESS? "INGRESS" : "EGRESS",
@@ -366,7 +366,7 @@ int proc_ip4(struct __sk_buff* skb, bool ingress, __u8* eth, struct iphdr* ip){
 			//Can never happen, but make verifier happy.
 			hdrs.sport = hdrs.dport = 0x0;
 		}
-		PRINTK("[%d:0x%p] Looking up IP4/%s, size %d", skb->ifindex,
+		PRINTK("[%d:0x%p][" DIR_STR "] Looking up IP4/%s, size %d", skb->ifindex,
 						skb,
 						(ip->protocol == IPPROTO_UDP)?
 							"UDP" : "TCP",

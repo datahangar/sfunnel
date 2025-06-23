@@ -12,6 +12,12 @@
 
 #define COMPILATION_ASSERT(COND, MSG) _Static_assert(COND, MSG)
 
+#if INGRESS == 1
+	#define DIR_STR "ingress"
+#else
+	#define DIR_STR "egress"
+#endif
+
 //Constants
 #define AF_INET   2
 #define AF_INET6 10
