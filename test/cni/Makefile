@@ -97,8 +97,6 @@ _check_affinity: _wait_up _wait_running
 	$(QUIET) SRC_IPS="$(SRC_IPS)" ITERATIONS=$(ITERATIONS) ./check_affinity.sh
 
 _check_perf: _wait_up _wait_running
-	$(QUIET) echo "Adjusting NS MTU..."
-	$(QUIET) sudo ip netns exec client ip link set veth1 mtu 1450
 	$(QUIET) echo "Unloading DEBUG sfunnel in NS..."
 	$(QUIET) $(MAKE) _unload
 	$(QUIET) echo "Loading NDEBUG sfunnel in NS..."
