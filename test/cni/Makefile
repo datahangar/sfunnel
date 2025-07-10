@@ -5,6 +5,7 @@ SHELL=/bin/bash
 CNI ?= cilium
 CPUS ?= 4
 NODES ?= 1
+DISABLE_GSO ?= 0
 
 ifeq ($(DEBUG),1)
     DEBUG := 1
@@ -56,6 +57,7 @@ _create_ns:
 	$(QUIET) sudo iptables -I FORWARD -d 192.168.240.0/20 -j ACCEPT
 	$(QUIET) export MINIKUBE_IPS="$$(minikube kubectl -- get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}')" && sudo ip route add 192.168.253.0/24 $$(for IP in $${MINIKUBE_IPS}; do echo "nexthop via $${IP}"; done)
 	$(QUIET) sudo bash -c "echo 1 > /proc/sys/net/ipv4/ip_forward"
+	$(QUIET) sudo ethtool -K veth0 gso off
 _delete_ns:
 	$(QUIET) sudo ip route del $$(ip route show 192.168.253.0/24) || true
 	$(QUIET) sudo iptables -D FORWARD -s 10.0.0.0/8 -j ACCEPT || true
@@ -96,11 +98,18 @@ _wait_running:
 _check_affinity: _wait_up _wait_running
 	$(QUIET) SRC_IPS="$(SRC_IPS)" ITERATIONS=$(ITERATIONS) ./check_affinity.sh
 
+GSO_STATE = $(if $(filter 1,$(DISABLE_GSO)),off,on)
+_adjust_gso:
+	$(QUIET) sudo ethtool -K veth0 gso $(GSO_STATE) tso $(GSO_STATE)
+	$(QUIET) sudo ip netns exec client ethtool -K veth1 gso $(GSO_STATE) tso $(GSO_STATE)
+
 _check_perf: _wait_up _wait_running
 	$(QUIET) echo "Unloading DEBUG sfunnel in NS..."
 	$(QUIET) $(MAKE) _unload
 	$(QUIET) echo "Loading NDEBUG sfunnel in NS..."
 	$(QUIET) $(MAKE) _load_perf
+	$(QUIET) echo "Adjusting GSO (DISABLE_GSO=$(DISABLE_GSO))..."
+	$(QUIET) $(MAKE) _adjust_gso
 	$(QUIET) echo "Replacing nginx with iperf temporally..."
 	$(QUIET) minikube kubectl -- apply -k perf/
 	$(QUIET) echo "Wait for all containers to be up and running..."
