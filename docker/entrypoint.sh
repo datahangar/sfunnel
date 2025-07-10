@@ -138,6 +138,8 @@ if [[ "${SEG_DEV_NAME}" != "" ]]; then
 	SEG_PAIR_DEV_IFINDEX=$(ip link show ${SEG_DEV_NAME}_pair | head -n 1 | awk '{print $1}' | tr -d ':')
 	SEG_PAIR_DEV_MAC="$(ip -j link show ${SEG_DEV_NAME}_pair | jq -r '.[0].address' | tr -d ':' | sed 's/\(..\)/0x\1, /g' | sed 's/,\s*$$//')"
 
+	(ip addr show dev ${SEG_DEV_NAME}_pair | grep -q 'inet ') || ip addr add 203.0.113.1/32 dev ${SEG_DEV_NAME}_pair
+
 	sysctl -q net.ipv4.conf.${SEG_DEV_NAME}.rp_filter=0
 	sysctl -q net.ipv4.conf.${SEG_DEV_NAME}.accept_local=1
 	sysctl -q net.ipv4.conf.${SEG_DEV_NAME}_pair.rp_filter=0
