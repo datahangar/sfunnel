@@ -172,10 +172,8 @@ jobs:
           NODES: ${{matrix.combination.nodes}}
         run: |
           cd sfunnel/test/cni/
-          make VERBOSE=1 _check_perf
-
-          #Create the markdown report
-          python3 perf/gen_report.py >> $GITHUB_STEP_SUMMARY
+          make VERBOSE=1 check_perf
+          make _gen_perf_reports >> $GITHUB_STEP_SUMMARY
 
   docker_build_test_publish:
     needs: [check_unit, check_cni_example]

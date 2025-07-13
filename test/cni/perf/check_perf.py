@@ -68,7 +68,11 @@ def main():
     check_perf("test_port_8080", LB_IP, results, [8080])
     check_perf("test_port_80_8080", LB_IP, results, [80, 8080])
 
-    with open('.last_perf_report.json', 'w') as json_file:
+    filename=".last_perf_report.json"
+    if os.environ.get('DISABLE_GSO') == "1":
+        filename = ".last_perf_report_nogso.json"
+
+    with open(filename, 'w') as json_file:
         json.dump(results, json_file, indent=4)
 
 if __name__ == "__main__":

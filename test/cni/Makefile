@@ -103,13 +103,21 @@ _adjust_gso:
 	$(QUIET) sudo ethtool -K veth0 gso $(GSO_STATE) tso $(GSO_STATE)
 	$(QUIET) sudo ip netns exec client ethtool -K veth1 gso $(GSO_STATE) tso $(GSO_STATE)
 
-_check_perf: _wait_up _wait_running
+_check_perf_gso:
+	$(QUIET) echo "Adjusting GSO (DISABLE_GSO=$(DISABLE_GSO))..."
+	$(QUIET) $(MAKE) _adjust_gso
+	$(QUIET) echo "Launching iperf tests..."
+	$(QUIET) DISABLE_GSO=$(DISABLE_GSO) DEBUG=1 NETNS=client python3 perf/check_perf.py
+
+_gen_perf_reports:
+	$(QUIET) python3 perf/gen_report.py .last_perf_report_nogso.json "Tests (TSO/GSO=off)"
+	$(QUIET) python3 perf/gen_report.py .last_perf_report.json --no-header "Tests (TSO/GSO=on)"
+
+check_perf: _wait_up _wait_running
 	$(QUIET) echo "Unloading DEBUG sfunnel in NS..."
 	$(QUIET) $(MAKE) _unload
 	$(QUIET) echo "Loading NDEBUG sfunnel in NS..."
 	$(QUIET) $(MAKE) _load_perf
-	$(QUIET) echo "Adjusting GSO (DISABLE_GSO=$(DISABLE_GSO))..."
-	$(QUIET) $(MAKE) _adjust_gso
 	$(QUIET) echo "Replacing nginx with iperf temporally..."
 	$(QUIET) minikube kubectl -- apply -k perf/
 	$(QUIET) echo "Wait for all containers to be up and running..."
@@ -119,13 +127,14 @@ _check_perf: _wait_up _wait_running
 	         done;
 	$(QUIET) echo "Workaround lingering old conntrack (metallb/kubeproxy bug?)..."
 	$(QUIET) for NODE in $$(minikube node list | awk '{print $$1}'); do minikube ssh -n $${NODE} "sudo conntrack -F"; done;
-	$(QUIET) echo "Launching iperf tests..."
-	DEBUG=1 NETNS=client python3 perf/check_perf.py
+	$(QUIET) echo "Checking perf with GSO..."
+	$(QUIET) DISABLE_GSO=0 $(MAKE) _check_perf_gso
+	$(QUIET) echo "Checking perf without GSO..."
+	$(QUIET) DISABLE_GSO=1 $(MAKE) _check_perf_gso
 	$(QUIET) echo "Unloading NDEBUG sfunnel in NS..."
 	$(QUIET) $(MAKE) _unload
 	$(QUIET) echo "Loading DEBUG sfunnel in NS..."
 	$(QUIET) $(MAKE) _load
 	$(QUIET) echo "Restoring nginx..."
 	$(QUIET) $(MAKE) _deploy
-	$(QUIET) echo "Print report..."
-	$(QUIET) python3 perf/gen_report.py
+	$(QUIET) $(MAKE) _gen_perf_reports
