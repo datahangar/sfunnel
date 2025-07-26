@@ -10,6 +10,7 @@
 #undef _LINUX_IF_H
 
 #include "common.h"
+#include "lookup.h"
 
 #define IP_DF 0x4000
 
@@ -249,6 +250,80 @@ bool pmtud_ip4_check(struct __sk_buff* skb, struct iphdr* ip,
 SEND_ICMP:
 	return pmtud_ip4_gen_frag_needed(skb, ip, usable_mtu,
 					 fib_params->ipv4_src);
+}
+
+static __always_inline
+int pmtud_proc_icmp(struct __sk_buff* skb, struct iphdr* ip){
+	int rc;
+	const sfunnel_ip4_rule_t* rule = NULL;
+	struct udphdr* udp;
+	struct icmphdr* icmp;
+	struct iphdr* inner_ip;
+	pkt_hdrs_t hdrs;
+	__u8 fhdr_size;
+
+	icmp = (struct icmphdr*) ((__u8*)ip + (ip->ihl * 4));
+	CHECK_SKB_PTR(skb, icmp+1);
+
+	if(icmp->type != ICMP_DEST_UNREACH || icmp->code != ICMP_FRAG_NEEDED)
+		return TC_ACT_UNSPEC;
+
+	inner_ip = (struct iphdr*)(icmp+1);
+	CHECK_SKB_PTR(skb, inner_ip+1);
+	if(inner_ip->protocol != IPPROTO_UDP &&
+	   inner_ip->protocol != IPPROTO_TCP)
+		return TC_ACT_UNSPEC;
+
+	hdrs.saddr = inner_ip->saddr;
+	hdrs.daddr = inner_ip->daddr;
+	hdrs.proto = inner_ip->protocol;
+
+	//Note RFC 792 only ensures the first 8 bytes of the original L4 hdr
+	//This got updated with RFC 4884 and 1812 in practice most systems
+	//will send _up_ to 64 bytes, which includes the inner L4 hdr, which
+	//allows us not to have to do "connection/flow tracking".
+	udp = (struct udphdr *) ((__u8*)inner_ip + (inner_ip->ihl * 4));
+	CHECK_SKB_PTR(skb, ((__u8*)udp) + 8);
+
+	hdrs.sport = udp->source;
+	hdrs.dport = udp->dest;
+
+	rule = ip4_rule_lookup(&hdrs);
+
+	if(!rule || !rule->actions.unfunnel.execute)
+		return TC_ACT_UNSPEC;
+
+	if(rule->actions.unfunnel.p.unfunnel.proto == IPPROTO_UDP){
+		fhdr_size = sizeof(struct udphdr);
+	}else if(rule->actions.unfunnel.p.unfunnel.proto == IPPROTO_TCP){
+		fhdr_size = sizeof(struct tcphdr);
+	}else{
+		return TC_ACT_SHOT;
+	}
+
+	CHECK_SKB_PTR(skb, ((__u8*)udp) + fhdr_size + 8);
+
+	//Now unfunnel
+	if(rule->actions.unfunnel.p.unfunnel.proto != inner_ip->protocol){
+		//Adjust protocol
+		union ttl_proto old_ttl = *(union ttl_proto*)&inner_ip->ttl;
+		__s64 diff = bpf_csum_diff((__be32*)&old_ttl, 4,
+					   (__be32*)&inner_ip->ttl, 4, 0);
+
+		__u32 l3_off = (__u8*)inner_ip - (__u8*)SKB_GET_ETH(skb);
+		l3_off += offsetof(struct iphdr, check);
+		rc = bpf_l3_csum_replace(skb, l3_off, 0, diff, 0);
+		if(rc < 0){
+			PRINTK("[%d:0x%p][pmtud][proc_icmp] ERROR l3_csum_replace : %d",
+			       skb->ifindex, skb, rc);
+			return TC_ACT_SHOT;
+		}
+	}
+
+	//Now set ports from inner L4 (+fhdr_size). We are lazy here.
+	*(__be32*)udp = *(__be32*)(((__u8*)udp) + fhdr_size);
+
+	return TC_ACT_OK;
 }
 
 #endif //SFUNNEL_PMTUD

@@ -310,6 +310,10 @@ int proc_ip4(struct __sk_buff* skb, bool ingress, __u8* eth, struct iphdr* ip){
 	}else if(ip->protocol == IPPROTO_TCP){
 		l4 = tcp = (struct tcphdr *) ((__u8*)ip + (ip->ihl * 4));
 		CHECK_SKB_PTR(skb, tcp+1);
+	}else if(ip->protocol == IPPROTO_ICMP){
+		if(ingress)
+			return pmtud_proc_icmp(skb, ip);
+		return TC_ACT_UNSPEC;
 	}else{
 		return TC_ACT_UNSPEC;
 	}
