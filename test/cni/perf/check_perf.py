@@ -1,14 +1,16 @@
+import argparse
+import json
 import os
+import re
+import requests
 import subprocess
 import sys
-import re
-import json
+import time
 
 def get_lb_ip():
-    return sys.argv[1] if len(sys.argv) > 1 else subprocess.getoutput(
+    return subprocess.getoutput(
         "minikube kubectl -- get service my-loadbalancer-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}'"
     )
-
 
 def get_throughput(output):
     for line in output.splitlines():
@@ -18,7 +20,7 @@ def get_throughput(output):
         if re.search(r'\d+\s+\S+', line):
             return float(line.split()[6])
 
-def check_perf(test_name, fqdn, results, target_ports, src_ips=[]):
+def check_perf_iperf(test_name, fqdn, results, target_ports, src_ips=[]):
     N_WORKERS = int(os.getenv('N_WORKERS', 4))
     debug = int(os.getenv('DEBUG', 0)) == 1
     mss = 1500 - 40 - 20 #IP+TCP overhead + funneling TCP overhead
@@ -58,19 +60,44 @@ def check_perf(test_name, fqdn, results, target_ports, src_ips=[]):
     }
 
     print(f"[{test_name}] Total throughput: {total_throughput:.2f} Mbit/s, Average throughput: {avg_throughput:.2f} Mbit/s")
+    return results
+
+def check_perf_requests(test_name, fqdn, results, port):
+    fqdn = "http://"+fqdn+":"+str(port)+"/testfile.bin"
+    start = time.time()
+    r = requests.get(fqdn, stream=True)
+    total = sum(len(chunk) for chunk in r.iter_content(8192))
+    elapsed = time.time() - start
+    throughput = (total * 8) / 1e6 / elapsed
+
+    results[test_name] = {
+        'number_of_workers': 1,
+        'total_throughput': throughput,
+        'average_throughput': throughput
+    }
+    print(f"[{test_name}] Throughput: {throughput:.2f} Mbit/s")
+
+    return results
 
 def main():
-    LB_IP = get_lb_ip()
+    parser = argparse.ArgumentParser(description="Check perf against LB service.")
+    parser.add_argument("command", help="Command to execute {iperf, wget}")
+    args = parser.parse_args()
 
+    LB_IP = get_lb_ip()
     results = {}
 
-    check_perf("test_port_80 (calibration)", LB_IP, results, [80])
-    check_perf("test_port_8080", LB_IP, results, [8080])
-    check_perf("test_port_80_8080", LB_IP, results, [80, 8080])
+    if args.command == "iperf":
+        results = check_perf_iperf("test_port_80 (calibration)", LB_IP, results, [80])
+        results = check_perf_iperf("test_port_8080", LB_IP, results, [8080])
+        results = check_perf_iperf("test_port_80_8080", LB_IP, results, [80, 8080])
+    else:
+        results = check_perf_requests("requests_80", LB_IP, results, 80)
+        results = check_perf_requests("requests_8080", LB_IP, results, 8080)
 
-    filename=".last_perf_report.json"
+    filename=f".{args.command}_report.json"
     if os.environ.get('DISABLE_GSO') == "1":
-        filename = ".last_perf_report_nogso.json"
+        filename = ".{args.command}_report_nogso.json"
 
     with open(filename, 'w') as json_file:
         json.dump(results, json_file, indent=4)
