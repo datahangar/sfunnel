@@ -3,7 +3,7 @@
 
 #include "common.h"
 
-typedef struct pkt_hdrs {
+typedef struct __attribute__((packed)) pkt_hdrs {
 	__be32 saddr;
 	__be32 daddr;
 	__u8 proto;

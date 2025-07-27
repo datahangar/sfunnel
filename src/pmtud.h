@@ -19,14 +19,7 @@ typedef struct pmtud_pkt {
 	struct icmphdr icmp;
 }pmtud_pkt_t;
 
-typedef struct __attribute__((packed)) pmtud_flow_hash{
-	__be32 saddr;
-	__be32 daddr;
-	__u8 proto;
-	__be16 sport;
-	__be16 dport;
-	__u8 zero[3];
-}pmtud_flow_hash_t;
+typedef pkt_hdrs_t pmtud_flow_hash_t;
 
 COMPILATION_ASSERT(sizeof(pmtud_flow_hash_t) == 16,
 		   "Size of pmtud_flow_hash_t must be 16!");
@@ -256,10 +249,11 @@ static __always_inline
 int pmtud_proc_icmp(struct __sk_buff* skb, struct iphdr* ip){
 	int rc;
 	const sfunnel_ip4_rule_t* rule = NULL;
+	pmtud_flow_state_t* state = NULL;
 	struct udphdr* udp;
 	struct icmphdr* icmp;
 	struct iphdr* inner_ip;
-	pkt_hdrs_t hdrs;
+	pkt_hdrs_t hdrs = {0};
 	__u8 fhdr_size;
 
 	icmp = (struct icmphdr*) ((__u8*)ip + (ip->ihl * 4));
@@ -278,11 +272,15 @@ int pmtud_proc_icmp(struct __sk_buff* skb, struct iphdr* ip){
 	hdrs.daddr = inner_ip->daddr;
 	hdrs.proto = inner_ip->protocol;
 
-	//Note RFC 792 only ensures the first 8 bytes of the original L4 hdr
+	//Note: RFC 792 only ensures the first 8 bytes of the original L4 hdr
 	//This got updated with RFC 4884 and 1812 in practice most systems
-	//will send _up_ to 64 bytes, which includes the inner L4 hdr, which
-	//allows us not to have to do "connection/flow tracking".
-	udp = (struct udphdr *) ((__u8*)inner_ip + (inner_ip->ihl * 4));
+	//will send at least 64 bytes, which includes the inner L4 hdr. This
+	//allows us to look in the inner L4 hdr instead of having to do
+	//flow tracking
+	//
+	//Note2: we are only interested in the s/dport of the L4 hdr. Using
+	//UDP as they are in the same position of the hdr.
+	udp = (struct udphdr *)((__u8*)inner_ip + (inner_ip->ihl * 4));
 	CHECK_SKB_PTR(skb, ((__u8*)udp) + 8);
 
 	hdrs.sport = udp->source;
@@ -293,12 +291,45 @@ int pmtud_proc_icmp(struct __sk_buff* skb, struct iphdr* ip){
 	if(!rule || !rule->actions.unfunnel.execute)
 		return TC_ACT_UNSPEC;
 
+
 	if(rule->actions.unfunnel.p.unfunnel.proto == IPPROTO_UDP){
 		fhdr_size = sizeof(struct udphdr);
 	}else if(rule->actions.unfunnel.p.unfunnel.proto == IPPROTO_TCP){
 		fhdr_size = sizeof(struct tcphdr);
 	}else{
 		return TC_ACT_SHOT;
+	}
+
+	//Recover the max network MTU
+	__u16 net_mtu = bpf_ntohs(icmp->un.frag.mtu);
+	__s64 icmp_diff = 0;
+
+	//Check whether we have to adjust the PMTUD map and adapt net_mtu
+	//Note: if not present in the map, the end host effective MTU will be
+	//lowered. We will further lower it once the first packet exceeding
+	//net_mtu + fhdr_size is intercepted, so no need to do anything here.
+	state = bpf_map_lookup_elem(&pmtud_map, &hdrs);
+	if(state){
+		if(net_mtu < state->last_seen_net_mtu){
+			state->last_seen_net_mtu = net_mtu;
+			state->adjusted_mtu = net_mtu - fhdr_size;
+
+			rc = bpf_map_update_elem(&pmtud_map, &hdrs, &state,
+						 BPF_ANY);
+			if(rc < 0){
+				PRINTK("[%d:0x%p][pmtud][net] Unable to create flow state rc=%d",
+							skb->ifindex, skb, rc);
+			}
+		}
+
+		__be32 old_mtu = *(__be32*)&icmp->un.frag;
+
+		//Adjust ICMP network MTU (-fhdr_size)
+		icmp->un.frag.mtu = bpf_htons(state->adjusted_mtu);
+
+		//Adjust ICMP checksum
+		icmp_diff = bpf_csum_diff(&old_mtu, 4, (__be32*)&icmp->un.frag,
+					  4, 0);
 	}
 
 	CHECK_SKB_PTR(skb, ((__u8*)udp) + fhdr_size + 8);
@@ -309,6 +340,9 @@ int pmtud_proc_icmp(struct __sk_buff* skb, struct iphdr* ip){
 		union ttl_proto old_ttl = *(union ttl_proto*)&inner_ip->ttl;
 		__s64 diff = bpf_csum_diff((__be32*)&old_ttl, 4,
 					   (__be32*)&inner_ip->ttl, 4, 0);
+		icmp_diff = bpf_csum_diff((__be32*)&old_ttl, 4,
+					  (__be32*)&inner_ip->ttl, 4,
+					  icmp_diff);
 
 		__u32 l3_off = (__u8*)inner_ip - (__u8*)SKB_GET_ETH(skb);
 		l3_off += offsetof(struct iphdr, check);
@@ -320,8 +354,23 @@ int pmtud_proc_icmp(struct __sk_buff* skb, struct iphdr* ip){
 		}
 	}
 
-	//Now set ports from inner L4 (+fhdr_size). We are lazy here.
+	//Now set ports from inner L4, which we recovered from the funneled
+	//L4 hdr (+fhdr_size)
+	__be32 old_ports = *(__be32*)udp;
 	*(__be32*)udp = *(__be32*)(((__u8*)udp) + fhdr_size);
+	icmp_diff = bpf_csum_diff((__be32*)&old_ports, 4,
+					  (__be32*)udp, 4,
+					  icmp_diff);
+
+	__u32 l4_off = (__u8*)udp - (__u8*)SKB_GET_ETH(skb);
+	l4_off += offsetof(struct icmphdr, checksum);
+	rc = bpf_l4_csum_replace(skb, l4_off, 0, icmp_diff, 0);
+	if(rc < 0){
+		PRINTK("[%d:0x%p][pmtud][net] Unable to set L4 csum. rc=%d",
+							skb->ifindex, skb,
+							rc);
+		return TC_ACT_SHOT;
+	}
 
 	return TC_ACT_OK;
 }
