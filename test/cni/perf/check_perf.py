@@ -1,11 +1,18 @@
 import argparse
 import json
 import os
+from pyroute2 import netns
 import re
 import requests
 import subprocess
 import sys
 import time
+
+def set_ns():
+    ns_name = os.getenv('NETNS')
+    if not ns_name:
+        return
+    netns.setns(ns_name)
 
 def get_lb_ip():
     return subprocess.getoutput(
@@ -25,8 +32,6 @@ def check_perf_iperf(test_name, fqdn, results, target_ports, src_ips=[]):
     debug = int(os.getenv('DEBUG', 0)) == 1
     mss = 1500 - 40 - 20 #IP+TCP overhead + funneling TCP overhead
     CMD = f"iperf --mss {mss} -f m"
-    if os.getenv('NETNS'):
-        CMD = f"sudo ip netns exec {os.getenv('NETNS')} " + CMD
     total_throughput = 0
     print(f"[{test_name}] Starting {N_WORKERS} workers against '{fqdn}' with target_ports='{target_ports}', src_ips='{src_ips}'")
 
@@ -64,12 +69,15 @@ def check_perf_iperf(test_name, fqdn, results, target_ports, src_ips=[]):
 
 def check_perf_requests(test_name, fqdn, results, port):
     fqdn = "http://"+fqdn+":"+str(port)+"/testfile.bin"
+
+    print(f"{fqdn}")
+
     start = time.time()
     r = requests.get(fqdn, stream=True)
     total = sum(len(chunk) for chunk in r.iter_content(8192))
     elapsed = time.time() - start
-    throughput = (total * 8) / 1e6 / elapsed
 
+    throughput = (total * 8) / 1e6 / elapsed
     results[test_name] = {
         'number_of_workers': 1,
         'total_throughput': throughput,
@@ -86,6 +94,9 @@ def main():
 
     LB_IP = get_lb_ip()
     results = {}
+
+    # Enter the right NS first
+    set_ns()
 
     if args.command == "iperf":
         results = check_perf_iperf("test_port_80 (calibration)", LB_IP, results, [80])

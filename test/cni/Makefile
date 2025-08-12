@@ -107,7 +107,7 @@ _check_perf_gso:
 	$(QUIET) echo "Adjusting GSO (DISABLE_GSO=$(DISABLE_GSO))..."
 	$(QUIET) $(MAKE) _adjust_gso
 	$(QUIET) echo "Launching $(CMD) tests..."
-	$(QUIET) DISABLE_GSO=$(DISABLE_GSO) DEBUG=1 NETNS=client python3 perf/check_perf.py $(CMD)
+	$(QUIET) DISABLE_GSO=$(DISABLE_GSO) DEBUG=1 NETNS=client sudo -E python3 perf/check_perf.py $(CMD)
 
 _gen_perf_reports:
 	$(QUIET) python3 perf/gen_report.py .$(REPORT)_report_nogso.json "$(REPORT) tests (TSO/GSO=off)"
@@ -140,13 +140,19 @@ check_perf_iperf: _wait_up _wait_running
 	$(QUIET) $(MAKE) _deploy
 	$(QUIET) $(MAKE) _gen_perf_reports REPORT=iperf
 
-_check_perf_mtu:
-	$(QUIET) echo "Adjusting GSO (DISABLE_GSO=$(DISABLE_GSO))..."
-	$(QUIET) $(MAKE) _adjust_gso
-	$(QUIET) echo "Launching iperf tests..."
-	$(QUIET) sudo ip netns exec client wget DISABLE_GSO=$(DISABLE_GSO) DEBUG=1 NETNS=client python3 perf/check_perf.py
-
 check_perf_requests: _wait_up _wait_running
+	$(QUIET) echo "Checking perf with GSO..."
+	$(QUIET) DISABLE_GSO=0 $(MAKE) _check_perf_gso CMD=requests
+	$(QUIET) echo "Checking perf without GSO..."
+	$(QUIET) DISABLE_GSO=1 $(MAKE) _check_perf_gso CMD=requests
+	$(QUIET) echo "Unloading NDEBUG sfunnel in NS..."
+	$(QUIET) $(MAKE) _unload
+	$(QUIET) echo "Loading DEBUG sfunnel in NS..."
+	$(QUIET) $(MAKE) _load
+	$(QUIET) echo "Restoring nginx..."
+	$(QUIET) $(MAKE) _deploy
+	$(QUIET) $(MAKE) _gen_perf_reports REPORT=requests
+	exit 11
 	$(QUIET) echo "Unloading DEBUG sfunnel in NS..."
 	$(QUIET) $(MAKE) _unload
 	$(QUIET) echo "Loading NDEBUG sfunnel in NS..."
@@ -167,14 +173,3 @@ check_perf_requests: _wait_up _wait_running
 	         done;
 	$(QUIET) echo "Workaround lingering old conntrack (metallb/kubeproxy bug?)..."
 	$(QUIET) for NODE in $$(minikube node list | awk '{print $$1}'); do minikube ssh -n $${NODE} "sudo conntrack -F"; done;
-	$(QUIET) echo "Checking perf with GSO..."
-	$(QUIET) DISABLE_GSO=0 $(MAKE) _check_perf_gso CMD=wget
-	$(QUIET) echo "Checking perf without GSO..."
-	$(QUIET) DISABLE_GSO=1 $(MAKE) _check_perf_gso CMD=wget
-	$(QUIET) echo "Unloading NDEBUG sfunnel in NS..."
-	$(QUIET) $(MAKE) _unload
-	$(QUIET) echo "Loading DEBUG sfunnel in NS..."
-	$(QUIET) $(MAKE) _load
-	$(QUIET) echo "Restoring nginx..."
-	$(QUIET) $(MAKE) _deploy
-	$(QUIET) $(MAKE) _gen_perf_reports REPORT=wget
