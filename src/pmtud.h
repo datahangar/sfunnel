@@ -295,7 +295,6 @@ int pmtud_proc_icmp(struct __sk_buff* skb, struct iphdr* ip){
 	if(!rule || !rule->actions.unfunnel.execute)
 		return TC_ACT_UNSPEC;
 
-
 	//Note: the funneling hdr in the quoted pkt is the one the rule matched
 	//(inner_ip->protocol), not the proto the unfunnel action restores
 	if(inner_ip->protocol == IPPROTO_UDP)
@@ -348,6 +347,17 @@ int pmtud_proc_icmp(struct __sk_buff* skb, struct iphdr* ip){
 		}
 	}
 
+	//Note: the csum helpers invalidate all pkt ptrs, so calculate the
+	//offsets and mangle the pkt _before_ calling them
+	__u32 l3_off = (__u8*)inner_ip - (__u8*)SKB_GET_ETH(skb);
+	__u32 l4_off = (__u8*)icmp - (__u8*)SKB_GET_ETH(skb);
+	bool unfunnel_proto = rule->actions.unfunnel.p.unfunnel.proto !=
+							inner_ip->protocol;
+	__s64 l3_diff = 0;
+
+	l3_off += offsetof(struct iphdr, check);
+	l4_off += offsetof(struct icmphdr, checksum);
+
 	__be32 old_mtu = *(__be32*)&icmp->un.frag;
 
 	//Adjust ICMP network MTU (-fhdr_size), so that the end host does not
@@ -358,26 +368,17 @@ int pmtud_proc_icmp(struct __sk_buff* skb, struct iphdr* ip){
 	icmp_diff = bpf_csum_diff(&old_mtu, 4, (__be32*)&icmp->un.frag, 4, 0);
 
 	//Now unfunnel
-	if(rule->actions.unfunnel.p.unfunnel.proto != inner_ip->protocol){
+	if(unfunnel_proto){
 		//Adjust protocol
 		union ttl_proto old_ttl = *(union ttl_proto*)&inner_ip->ttl;
 
 		inner_ip->protocol = rule->actions.unfunnel.p.unfunnel.proto;
 
-		__s64 diff = bpf_csum_diff((__be32*)&old_ttl, 4,
-					   (__be32*)&inner_ip->ttl, 4, 0);
-		icmp_diff = bpf_csum_diff((__be32*)&old_ttl, 4,
-					  (__be32*)&inner_ip->ttl, 4,
-					  icmp_diff);
-
-		__u32 l3_off = (__u8*)inner_ip - (__u8*)SKB_GET_ETH(skb);
-		l3_off += offsetof(struct iphdr, check);
-		rc = bpf_l3_csum_replace(skb, l3_off, 0, diff, 0);
-		if(rc < 0){
-			PRINTK("[%d:0x%p][pmtud][proc_icmp] ERROR l3_csum_replace : %d",
-			       skb->ifindex, skb, rc);
-			return TC_ACT_SHOT;
-		}
+		//Note: no icmp_diff accumulation here. The ICMP csum covers the
+		//quoted IP hdr, but the proto delta is cancelled out by the
+		//opposite delta bpf_l3_csum_replace() applies to its check
+		l3_diff = bpf_csum_diff((__be32*)&old_ttl, 4,
+					(__be32*)&inner_ip->ttl, 4, 0);
 	}
 
 	//Now set ports from inner L4, which we recovered from the funneled
@@ -388,8 +389,16 @@ int pmtud_proc_icmp(struct __sk_buff* skb, struct iphdr* ip){
 					  (__be32*)udp, 4,
 					  icmp_diff);
 
-	__u32 l4_off = (__u8*)udp - (__u8*)SKB_GET_ETH(skb);
-	l4_off += offsetof(struct icmphdr, checksum);
+	//Pkt fully mangled; from here on pkt ptrs must not be used anymore
+	if(unfunnel_proto){
+		rc = bpf_l3_csum_replace(skb, l3_off, 0, l3_diff, 0);
+		if(rc < 0){
+			PRINTK("[%d:0x%p][pmtud][proc_icmp] ERROR l3_csum_replace : %d",
+			       skb->ifindex, skb, rc);
+			return TC_ACT_SHOT;
+		}
+	}
+
 	rc = bpf_l4_csum_replace(skb, l4_off, 0, icmp_diff, 0);
 	if(rc < 0){
 		PRINTK("[%d:0x%p][pmtud][net] Unable to set L4 csum. rc=%d",
