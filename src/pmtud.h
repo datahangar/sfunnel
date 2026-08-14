@@ -321,28 +321,41 @@ int pmtud_proc_icmp(struct __sk_buff* skb, struct iphdr* ip){
 	hash.sport = *(__be16*)(((__u8*)udp) + fhdr_size);
 	hash.dport = *(__be16*)(((__u8*)udp) + fhdr_size + 2);
 
-	//Check whether we have to adjust the PMTUD map and adapt net_mtu
-	//Note: if not present in the map, the end host effective MTU will be
-	//lowered. We will further lower it once the first packet exceeding
-	//net_mtu + fhdr_size is intercepted, so no need to do anything here.
+	//Adjust the PMTUD state to the MTU advertised by the network. The flow
+	//may have never been seen in the egress path (e.g. the network lowered
+	//the MTU before we ever had to generate a frag. needed ourselves), in
+	//which case the state has to be created here.
+	__u16 adjusted_mtu = net_mtu - fhdr_size;
+
 	state = bpf_map_lookup_elem(&pmtud_map, &hash);
 	if(state){
 		if(net_mtu < state->last_seen_net_mtu){
 			//Note: the ptr returned by a HASH map lookup points to
 			//the value itself, so writes through it are persistent
 			state->last_seen_net_mtu = net_mtu;
-			state->adjusted_mtu = net_mtu - fhdr_size;
+			state->adjusted_mtu = adjusted_mtu;
 		}
-
-		__be32 old_mtu = *(__be32*)&icmp->un.frag;
-
-		//Adjust ICMP network MTU (-fhdr_size)
-		icmp->un.frag.mtu = bpf_htons(state->adjusted_mtu);
-
-		//Adjust ICMP checksum
-		icmp_diff = bpf_csum_diff(&old_mtu, 4, (__be32*)&icmp->un.frag,
-					  4, 0);
+		adjusted_mtu = state->adjusted_mtu;
+	}else{
+		pmtud_flow_state_t new_state = {
+				.last_seen_net_mtu = net_mtu,
+				.adjusted_mtu = adjusted_mtu
+		};
+		rc = bpf_map_update_elem(&pmtud_map, &hash, &new_state, BPF_ANY);
+		if(rc < 0){
+			PRINTK("[%d:0x%p][pmtud][net] Unable to create flow state rc=%d",
+						skb->ifindex, skb, rc);
+		}
 	}
+
+	__be32 old_mtu = *(__be32*)&icmp->un.frag;
+
+	//Adjust ICMP network MTU (-fhdr_size), so that the end host does not
+	//emit packets that won't fit once funneled
+	icmp->un.frag.mtu = bpf_htons(adjusted_mtu);
+
+	//Adjust ICMP checksum
+	icmp_diff = bpf_csum_diff(&old_mtu, 4, (__be32*)&icmp->un.frag, 4, 0);
 
 	//Now unfunnel
 	if(rule->actions.unfunnel.p.unfunnel.proto != inner_ip->protocol){
