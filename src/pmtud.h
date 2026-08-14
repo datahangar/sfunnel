@@ -296,13 +296,12 @@ int pmtud_proc_icmp(struct __sk_buff* skb, struct iphdr* ip){
 		return TC_ACT_UNSPEC;
 
 
-	if(rule->actions.unfunnel.p.unfunnel.proto == IPPROTO_UDP){
+	//Note: the funneling hdr in the quoted pkt is the one the rule matched
+	//(inner_ip->protocol), not the proto the unfunnel action restores
+	if(inner_ip->protocol == IPPROTO_UDP)
 		fhdr_size = sizeof(struct udphdr);
-	}else if(rule->actions.unfunnel.p.unfunnel.proto == IPPROTO_TCP){
+	else
 		fhdr_size = sizeof(struct tcphdr);
-	}else{
-		return TC_ACT_SHOT;
-	}
 
 	//Recover the max network MTU
 	__u16 net_mtu = bpf_ntohs(icmp->un.frag.mtu);
