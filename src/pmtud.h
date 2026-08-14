@@ -361,6 +361,9 @@ int pmtud_proc_icmp(struct __sk_buff* skb, struct iphdr* ip){
 	if(rule->actions.unfunnel.p.unfunnel.proto != inner_ip->protocol){
 		//Adjust protocol
 		union ttl_proto old_ttl = *(union ttl_proto*)&inner_ip->ttl;
+
+		inner_ip->protocol = rule->actions.unfunnel.p.unfunnel.proto;
+
 		__s64 diff = bpf_csum_diff((__be32*)&old_ttl, 4,
 					   (__be32*)&inner_ip->ttl, 4, 0);
 		icmp_diff = bpf_csum_diff((__be32*)&old_ttl, 4,
