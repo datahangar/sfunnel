@@ -268,8 +268,12 @@ int pmtud_proc_icmp(struct __sk_buff* skb, struct iphdr* ip){
 	   inner_ip->protocol != IPPROTO_TCP)
 		return TC_ACT_UNSPEC;
 
-	hdrs.saddr = inner_ip->saddr;
-	hdrs.daddr = inner_ip->daddr;
+	//Note: the ICMP quotes a pkt _we_ funneled and sent out, whereas
+	//unfunnel rules live in the ingress path, hence they describe the
+	//mirror flow (our funneled traffic coming back). Lookup the rule with
+	//the quoted flow reversed.
+	hdrs.saddr = inner_ip->daddr;
+	hdrs.daddr = inner_ip->saddr;
 	hdrs.proto = inner_ip->protocol;
 
 	//Note: RFC 792 only ensures the first 8 bytes of the original L4 hdr
@@ -283,8 +287,8 @@ int pmtud_proc_icmp(struct __sk_buff* skb, struct iphdr* ip){
 	udp = (struct udphdr *)((__u8*)inner_ip + (inner_ip->ihl * 4));
 	CHECK_SKB_PTR(skb, ((__u8*)udp) + 8);
 
-	hdrs.sport = udp->source;
-	hdrs.dport = udp->dest;
+	hdrs.sport = udp->dest;
+	hdrs.dport = udp->source;
 
 	rule = ip4_rule_lookup(&hdrs);
 
