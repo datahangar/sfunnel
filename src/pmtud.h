@@ -37,7 +37,7 @@ COMPILATION_ASSERT(sizeof(pmtud_flow_state_t) == 4,
 struct{
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, PMTUD_MAP_N_ENTRIES);
-    __type(key, pmtud_flow_state_t);
+    __type(key, pmtud_flow_hash_t);
     __type(value, pmtud_flow_state_t);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } PMTUD_MAP_NAME SEC(".maps");
