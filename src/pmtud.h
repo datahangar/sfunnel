@@ -328,15 +328,10 @@ int pmtud_proc_icmp(struct __sk_buff* skb, struct iphdr* ip){
 	state = bpf_map_lookup_elem(&pmtud_map, &hash);
 	if(state){
 		if(net_mtu < state->last_seen_net_mtu){
+			//Note: the ptr returned by a HASH map lookup points to
+			//the value itself, so writes through it are persistent
 			state->last_seen_net_mtu = net_mtu;
 			state->adjusted_mtu = net_mtu - fhdr_size;
-
-			rc = bpf_map_update_elem(&pmtud_map, &hdrs, &state,
-						 BPF_ANY);
-			if(rc < 0){
-				PRINTK("[%d:0x%p][pmtud][net] Unable to create flow state rc=%d",
-							skb->ifindex, skb, rc);
-			}
 		}
 
 		__be32 old_mtu = *(__be32*)&icmp->un.frag;
