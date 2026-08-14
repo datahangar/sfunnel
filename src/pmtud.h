@@ -307,11 +307,25 @@ int pmtud_proc_icmp(struct __sk_buff* skb, struct iphdr* ip){
 	__u16 net_mtu = bpf_ntohs(icmp->un.frag.mtu);
 	__s64 icmp_diff = 0;
 
+	CHECK_SKB_PTR(skb, ((__u8*)udp) + fhdr_size + 8);
+
+	//The quoted pkt is the funneled one, but the PMTUD state is keyed with
+	//the original (pre funneling) flow, as done in pmtud_ip4_check().
+	//Addrs are not modified by funneling; the proto is the one restored by
+	//the unfunnel action and the ports are in the inner L4 hdr, right
+	//after the funneling hdr (+fhdr_size)
+	pmtud_flow_hash_t hash = {0};
+	hash.saddr = inner_ip->saddr;
+	hash.daddr = inner_ip->daddr;
+	hash.proto = rule->actions.unfunnel.p.unfunnel.proto;
+	hash.sport = *(__be16*)(((__u8*)udp) + fhdr_size);
+	hash.dport = *(__be16*)(((__u8*)udp) + fhdr_size + 2);
+
 	//Check whether we have to adjust the PMTUD map and adapt net_mtu
 	//Note: if not present in the map, the end host effective MTU will be
 	//lowered. We will further lower it once the first packet exceeding
 	//net_mtu + fhdr_size is intercepted, so no need to do anything here.
-	state = bpf_map_lookup_elem(&pmtud_map, &hdrs);
+	state = bpf_map_lookup_elem(&pmtud_map, &hash);
 	if(state){
 		if(net_mtu < state->last_seen_net_mtu){
 			state->last_seen_net_mtu = net_mtu;
@@ -334,8 +348,6 @@ int pmtud_proc_icmp(struct __sk_buff* skb, struct iphdr* ip){
 		icmp_diff = bpf_csum_diff(&old_mtu, 4, (__be32*)&icmp->un.frag,
 					  4, 0);
 	}
-
-	CHECK_SKB_PTR(skb, ((__u8*)udp) + fhdr_size + 8);
 
 	//Now unfunnel
 	if(rule->actions.unfunnel.p.unfunnel.proto != inner_ip->protocol){
