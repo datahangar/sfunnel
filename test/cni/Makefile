@@ -128,7 +128,6 @@ check_perf_iperf: _wait_up _wait_running
 	$(QUIET) echo "Workaround lingering old conntrack (metallb/kubeproxy bug?)..."
 	$(QUIET) for NODE in $$(minikube node list | awk '{print $$1}'); do minikube ssh -n $${NODE} "sudo conntrack -F"; done;
 	$(QUIET) echo "Checking perf with GSO..."
-	exit 11
 	$(QUIET) DISABLE_GSO=0 $(MAKE) _check_perf_gso CMD=iperf
 	$(QUIET) echo "Checking perf without GSO..."
 	$(QUIET) DISABLE_GSO=1 $(MAKE) _check_perf_gso CMD=iperf
@@ -152,7 +151,9 @@ check_perf_requests: _wait_up _wait_running
 	$(QUIET) echo "Restoring nginx..."
 	$(QUIET) $(MAKE) _deploy
 	$(QUIET) $(MAKE) _gen_perf_reports REPORT=requests
-	exit 11
+
+##WIP: MTU/PMTUD test. Not part of check_perf yet
+_check_perf_mtu:
 	$(QUIET) echo "Unloading DEBUG sfunnel in NS..."
 	$(QUIET) $(MAKE) _unload
 	$(QUIET) echo "Loading NDEBUG sfunnel in NS..."
