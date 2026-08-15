@@ -381,12 +381,24 @@ int pmtud_proc_icmp(struct __sk_buff* skb, struct iphdr* ip){
 					(__be32*)&inner_ip->ttl, 4, 0);
 	}
 
-	//Now set ports from inner L4, which we recovered from the funneled
-	//L4 hdr (+fhdr_size)
-	__be32 old_ports = *(__be32*)udp;
+	//Now restore the first 8 bytes of the original L4 hdr, which sit right
+	//after the funneling hdr (+fhdr_size).
+	//
+	//Note: restoring the ports only is not enough. TCP end hosts also
+	//validate the quoted seq against the send window (see tcp_v4_err()),
+	//and would drop the ICMP as out of window, since the funneling hdr
+	//carries a constant seq. 8 bytes is what RFC 792 quotes, hence all the
+	//end host can rely on
+	__be32 old_l4[2];
+
+	old_l4[0] = *(__be32*)udp;
+	old_l4[1] = *(((__be32*)udp) + 1);
+
 	*(__be32*)udp = *(__be32*)(((__u8*)udp) + fhdr_size);
-	icmp_diff = bpf_csum_diff((__be32*)&old_ports, 4,
-					  (__be32*)udp, 4,
+	*(((__be32*)udp) + 1) = *(__be32*)(((__u8*)udp) + fhdr_size + 4);
+
+	icmp_diff = bpf_csum_diff(old_l4, sizeof(old_l4),
+					  (__be32*)udp, sizeof(old_l4),
 					  icmp_diff);
 
 	//Pkt fully mangled; from here on pkt ptrs must not be used anymore
