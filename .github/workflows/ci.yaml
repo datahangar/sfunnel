@@ -88,7 +88,8 @@ jobs:
           sudo apt-get install -y clang make iproute2 iperf \
                                   bridge-utils python3-scapy python3-pip libbpf-dev \
                                   libelf-dev linux-headers-generic \
-                                  linux-libc-dev llvm iptables
+                                  linux-libc-dev llvm iptables \
+                                  python3-pyroute2 python3-requests
           sudo ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/asm
           if [[ "${{ matrix.combination.runner }}" == "ubuntu-24.04" ]]; then
             sudo apt-get install python3-pytest
