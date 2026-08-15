@@ -108,7 +108,7 @@ def main():
 
     filename=f".{args.command}_report.json"
     if os.environ.get('DISABLE_GSO') == "1":
-        filename = ".{args.command}_report_nogso.json"
+        filename = f".{args.command}_report_nogso.json"
 
     with open(filename, 'w') as json_file:
         json.dump(results, json_file, indent=4)
